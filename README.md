@@ -1,0 +1,1 @@
+# hirano_inventory_manage
