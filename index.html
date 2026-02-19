@@ -1,925 +1,164 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>GS1コード 読み取りテストツール（履歴はリロードまで）</title>
-  <style>
-    :root{
-      --bg:#0b1020;
-      --card:#121a33;
-      --muted:#9fb0ff;
-      --text:#e9eeff;
-      --danger:#ff5a7a;
-      --ok:#4be38a;
-      --line:rgba(255,255,255,.12);
-      --btn:#2a3cff;
-      --btn2:#1e2a52;
-      --shadow:0 10px 30px rgba(0,0,0,.35);
-      --radius:14px;
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
-    }
-    *{ box-sizing:border-box; }
-    body{
-      margin:0;
-      font-family:var(--sans);
-      background: radial-gradient(1200px 800px at 20% 10%, rgba(42,60,255,.25), transparent 55%),
-                  radial-gradient(900px 700px at 80% 30%, rgba(75,227,138,.15), transparent 55%),
-                  var(--bg);
-      color:var(--text);
-    }
-    header{
-      padding:22px 16px 12px;
-      max-width:1100px;
-      margin:0 auto;
-    }
-    h1{
-      margin:0 0 6px;
-      font-size:18px;
-      letter-spacing:.2px;
-    }
-    .sub{
-      margin:0;
-      color:rgba(233,238,255,.75);
-      font-size:13px;
-      line-height:1.5;
-    }
-    main{
-      max-width:1100px;
-      margin:0 auto;
-      padding:12px 16px 28px;
-      display:grid;
-      grid-template-columns: 1.2fr .8fr;
-      gap:14px;
-    }
-    @media (max-width: 980px){
-      main{ grid-template-columns:1fr; }
-    }
-    .card{
-      background: linear-gradient(180deg, rgba(18,26,51,.92), rgba(18,26,51,.72));
-      border:1px solid var(--line);
-      border-radius:var(--radius);
-      box-shadow:var(--shadow);
-      overflow:hidden;
-    }
-    .card .hd{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      padding:14px 14px 10px;
-      border-bottom:1px solid var(--line);
-      gap:10px;
-    }
-    .card .hd h2{
-      margin:0;
-      font-size:14px;
-      letter-spacing:.2px;
-    }
-    .badge{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding:6px 10px;
-      border-radius:999px;
-      font-size:12px;
-      border:1px solid var(--line);
-      background:rgba(255,255,255,.03);
-      color:rgba(233,238,255,.85);
-      white-space:nowrap;
-    }
-    .dot{
-      width:9px;height:9px;border-radius:50%;
-      background:rgba(255,255,255,.35);
-      box-shadow:0 0 0 0 rgba(255,255,255,0);
-    }
-    .dot.ok{ background:var(--ok); }
-    .dot.busy{
-      background: #ffd35a;
-      animation:pulse 1.1s infinite ease-in-out;
-      box-shadow:0 0 0 0 rgba(255,211,90,.45);
-    }
-    .dot.err{ background:var(--danger); }
-    @keyframes pulse{
-      0%{ box-shadow:0 0 0 0 rgba(255,211,90,.45); }
-      70%{ box-shadow:0 0 0 10px rgba(255,211,90,0); }
-      100%{ box-shadow:0 0 0 0 rgba(255,211,90,0); }
-    }
-
-    .controls{
-      padding:12px 14px 14px;
-      display:flex;
-      gap:10px;
-      flex-wrap:wrap;
-      align-items:center;
-    }
-    button{
-      border:0;
-      border-radius:12px;
-      padding:11px 14px;
-      font-weight:700;
-      color:var(--text);
-      cursor:pointer;
-      transition: transform .08s ease, opacity .2s ease, background .2s ease;
-      box-shadow: 0 10px 22px rgba(0,0,0,.25);
-    }
-    button:active{ transform: translateY(1px); }
-    .primary{ background: linear-gradient(180deg, rgba(42,60,255,1), rgba(42,60,255,.82)); }
-    .secondary{ background: linear-gradient(180deg, rgba(30,42,82,1), rgba(30,42,82,.75)); }
-    .danger{ background: linear-gradient(180deg, rgba(255,90,122,1), rgba(255,90,122,.82)); }
-    button[disabled]{
-      opacity:.45;
-      cursor:not-allowed;
-      box-shadow:none;
-    }
-    .hint{
-      color:rgba(233,238,255,.75);
-      font-size:12px;
-      line-height:1.5;
-      margin-left:auto;
-    }
-    .viewer{
-      padding:0 14px 14px;
-    }
-    .videoWrap{
-      position:relative;
-      border-radius:14px;
-      overflow:hidden;
-      border:1px solid var(--line);
-      background: rgba(0,0,0,.25);
-      aspect-ratio: 16 / 10;
-    }
-    video{
-      width:100%;
-      height:100%;
-      object-fit:cover;
-      display:block;
-    }
-    canvas{ display:none; }
-    .overlay{
-      position:absolute;
-      inset:0;
-      pointer-events:none;
-      display:flex;
-      align-items:flex-end;
-      justify-content:space-between;
-      padding:10px;
-      gap:10px;
-      background: linear-gradient(180deg, transparent 55%, rgba(0,0,0,.55));
-    }
-    .overlay .msg{
-      font-size:12px;
-      color:rgba(233,238,255,.9);
-      background: rgba(18,26,51,.65);
-      border:1px solid var(--line);
-      border-radius:12px;
-      padding:8px 10px;
-      max-width: 70%;
-      line-height:1.4;
-    }
-    .overlay .pill{
-      font-family:var(--mono);
-      font-size:11px;
-      padding:8px 10px;
-      border-radius:999px;
-      border:1px solid var(--line);
-      background: rgba(18,26,51,.65);
-      color: rgba(233,238,255,.85);
-      white-space:nowrap;
-    }
-
-    .panel{
-      padding:12px 14px 14px;
-      display:grid;
-      gap:10px;
-    }
-    .kv{
-      display:grid;
-      gap:8px;
-    }
-    .row{
-      display:grid;
-      grid-template-columns: 120px 1fr;
-      gap:10px;
-      align-items:start;
-      padding:10px;
-      border:1px solid var(--line);
-      border-radius:12px;
-      background: rgba(255,255,255,.03);
-    }
-    .k{
-      color:rgba(233,238,255,.75);
-      font-size:12px;
-    }
-    .v{
-      font-size:12px;
-      line-height:1.45;
-      word-break:break-word;
-    }
-    .mono{
-      font-family:var(--mono);
-      font-size:12px;
-      white-space:pre-wrap;
-      word-break:break-word;
-    }
-
-    .history{
-      padding:10px 14px 14px;
-    }
-    .history table{
-      width:100%;
-      border-collapse:collapse;
-      font-size:12px;
-    }
-    .history th, .history td{
-      padding:10px 8px;
-      border-bottom:1px solid var(--line);
-      vertical-align:top;
-      text-align:left;
-    }
-    .history th{
-      color:rgba(233,238,255,.75);
-      font-weight:700;
-      font-size:12px;
-    }
-    .tag{
-      display:inline-block;
-      font-family:var(--mono);
-      font-size:11px;
-      padding:3px 8px;
-      border-radius:999px;
-      border:1px solid var(--line);
-      background: rgba(255,255,255,.03);
-      color:rgba(233,238,255,.85);
-      margin-right:6px;
-      margin-top:2px;
-    }
-    .small{
-      font-size:11px;
-      color:rgba(233,238,255,.65);
-      line-height:1.45;
-    }
-    .warn{
-      color: rgba(255,211,90,.92);
-    }
-    .errText{
-      color: rgba(255,90,122,.92);
-    }
-    .okText{
-      color: rgba(75,227,138,.92);
-    }
-    details{
-      border:1px solid var(--line);
-      border-radius:12px;
-      padding:10px;
-      background: rgba(255,255,255,.02);
-    }
-    summary{
-      cursor:pointer;
-      color:rgba(233,238,255,.85);
-      font-size:12px;
-      font-weight:700;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>GS1 調剤薬局ツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<style>
+body {
+  font-family: sans-serif;
+  margin: 20px;
+}
+h1 {
+  margin-bottom: 10px;
+}
+#reader {
+  width: 100%;
+  max-width: 400px;
+  border: 1px solid #ccc;
+}
+button {
+  margin: 5px 0;
+  padding: 10px;
+  width: 200px;
+}
+.mode {
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+.result {
+  margin-top: 10px;
+  padding: 10px;
+  background: #f3f3f3;
+}
+</style>
 </head>
-
 <body>
-  <header>
-    <h1>GS1コード 読み取りテストツール</h1>
-    <p class="sub">
-      「読み取り開始」ボタンを押してからバーコードを読み取るまでの間のみカメラを起動します。<br>
-      履歴は<strong>リロードするまで</strong>画面に残ります（DB保存・リロード後の保持はしません）。
-    </p>
-  </header>
 
-  <main>
-    <!-- Left: Camera / Controls -->
-    <section class="card">
-      <div class="hd">
-        <h2>カメラ読み取り</h2>
-        <span class="badge" id="statusBadge"><span class="dot" id="statusDot"></span><span id="statusText">待機中</span></span>
-      </div>
+<h1>GS1バーコードツール</h1>
+
+<div class="mode">
+現在のモード：
+<select id="modeSelect">
+  <option value="save">データ保存モード</option>
+  <option value="search">検索モード</option>
+</select>
+</div>
+
+<div id="reader"></div>
+
+<div class="result" id="output"></div>
+
+<script>
+let db = JSON.parse(localStorage.getItem("gs1db") || "[]");
+
+function saveDB() {
+  localStorage.setItem("gs1db", JSON.stringify(db));
+}
+
+// GS1解析
+function parseGS1(data) {
+  let gtin = null;
+  let expiry = null;
+
+  if (data.includes("(01)")) {
+    gtin = data.match(/\(01\)(\d{14})/)?.[1];
+  } else if (data.startsWith("01")) {
+    gtin = data.substring(2, 16);
+  }
+
+  if (data.includes("(17)")) {
+    expiry = data.match(/\(17\)(\d{6})/)?.[1];
+  } else {
+    let match = data.match(/17(\d{6})/);
+    if (match) expiry = match[1];
+  }
+
+  return { gtin, expiry };
+}
+
+function formatExpiry(e) {
+  if (!e) return "";
+  return "20" + e.substring(0,2) + "-" + e.substring(2,4) + "-" + e.substring(4,6);
+}
+
+function handleScan(code) {
+  let mode = document.getElementById("modeSelect").value;
+  let parsed = parseGS1(code);
+
+  let gtin = parsed.gtin;
+  let expiry = parsed.expiry;
+
+  if (!gtin) {
+    gtin = prompt("GTINが読み取れません。入力してください（14桁）");
+  }
+  if (!expiry) {
+    expiry = prompt("使用期限が読み取れません。入力してください（YYMMDD）");
+  }
+
+  if (!gtin || !expiry) {
+    alert("入力が不完全です。");
+    return;
+  }
+
+  expiry = formatExpiry(expiry);
+
+  if (mode === "save") {
+    db.push({ gtin, expiry });
+    saveDB();
+    document.getElementById("output").innerHTML =
+      "保存しました<br>GTIN: " + gtin + "<br>期限: " + expiry;
+  }
+
+  if (mode === "search") {
+    let matches = db.filter(x => x.gtin === gtin);
+    if (matches.length === 0) {
+      document.getElementById("output").innerHTML = "該当商品なし";
+      return;
+    }
+
+    let earliest = matches.reduce((a,b)=> a.expiry < b.expiry ? a : b);
+
+    document.getElementById("output").innerHTML =
+      "該当件数: " + matches.length + "<br>" +
+      "最短期限: " + earliest.expiry + "<br><br>" +
+      "<button onclick='deleteCurrent(\""+gtin+"\",\""+expiry+"\")'>今読んだ期限データを削除</button>";
+  }
+}
+
+function deleteCurrent(gtin, expiry) {
+  let index = db.findIndex(x => x.gtin===gtin && x.expiry===expiry);
+  if (index >= 0) {
+    db.splice(index,1);
+    saveDB();
+    alert("削除しました");
+  } else {
+    alert("該当データなし");
+  }
+}
+
+Quagga.init({
+  inputStream : {
+    name : "Live",
+    type : "LiveStream",
+    target: document.querySelector('#reader')
+  },
+  decoder : {
+    readers : ["code_128_reader"]
+  }
+}, function(err) {
+    if (err) {
+        console.log(err);
+        return;
+    }
+    Quagga.start();
+});
+
+Quagga.onDetected(function(data){
+  let code = data.codeResult.code;
+  handleScan(code);
+});
+</script>
 
-      <div class="controls">
-        <button class="primary" id="btnStart">読み取り開始</button>
-        <button class="secondary" id="btnStop" disabled>停止</button>
-        <button class="danger" id="btnClear">履歴クリア</button>
-        <span class="hint" id="supportHint">対応状況を確認中…</span>
-      </div>
-
-      <div class="viewer">
-        <div class="videoWrap">
-          <video id="video" playsinline muted></video>
-          <canvas id="canvas"></canvas>
-          <div class="overlay">
-            <div class="msg" id="overlayMsg">
-              「読み取り開始」を押すと背面カメラを起動します。<br>
-              GS1（例：GS1 DataMatrix / GS1-128 / GS1 QR など）を枠内に入れてください。
-            </div>
-            <div class="pill" id="techPill">技術: 未判定</div>
-          </div>
-        </div>
-        <p class="small" style="margin:10px 2px 0;">
-          ※ iOS/Safari など一部環境では、ブラウザ標準のバーコード検出が未対応な場合があります。その場合は自動的にライブラリ方式へ切り替えます。
-        </p>
-      </div>
-    </section>
-
-    <!-- Right: Latest / Parsed -->
-    <section class="card">
-      <div class="hd">
-        <h2>直近の読み取り結果</h2>
-        <span class="badge"><span class="dot ok"></span>リロードまで保持</span>
-      </div>
-
-      <div class="panel">
-        <div class="kv">
-          <div class="row">
-            <div class="k">読み取り時刻</div>
-            <div class="v" id="latestTime">—</div>
-          </div>
-          <div class="row">
-            <div class="k">生データ</div>
-            <div class="v mono" id="latestRaw">—</div>
-          </div>
-          <div class="row">
-            <div class="k">GS1解析</div>
-            <div class="v" id="latestParsed">
-              <span class="small">—</span>
-            </div>
-          </div>
-        </div>
-
-        <details>
-          <summary>GS1解析について（簡易）</summary>
-          <div class="small" style="margin-top:8px;">
-            本ツールは「(01)…(17)…」のような括弧付き表記、または FNC1（区切り：ASCII 29 / GS）を含む文字列を
-            できるだけ解析します。医療向けでよく使われる AI（例：01, 17, 10, 21 など）を中心に対応しています。<br>
-            解析できない場合でも<strong>生データは必ず履歴に記録</strong>します。
-          </div>
-        </details>
-      </div>
-    </section>
-
-    <!-- Full width: History -->
-    <section class="card" style="grid-column:1 / -1;">
-      <div class="hd">
-        <h2>読み取り履歴</h2>
-        <span class="badge"><span class="dot" id="histDot"></span><span id="histCount">0 件</span></span>
-      </div>
-      <div class="history">
-        <table>
-          <thead>
-            <tr>
-              <th style="width:170px;">時刻</th>
-              <th style="width:140px;">形式</th>
-              <th>内容</th>
-            </tr>
-          </thead>
-          <tbody id="historyBody">
-            <tr><td colspan="3" class="small">まだ読み取り履歴がありません。</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </main>
-
-  <!-- Fallback library (ZXing) - only used when BarcodeDetector API isn't available -->
-  <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
-
-  <script>
-    (() => {
-      // ====== UI elements ======
-      const btnStart = document.getElementById('btnStart');
-      const btnStop  = document.getElementById('btnStop');
-      const btnClear = document.getElementById('btnClear');
-
-      const statusDot  = document.getElementById('statusDot');
-      const statusText = document.getElementById('statusText');
-      const supportHint = document.getElementById('supportHint');
-      const techPill = document.getElementById('techPill');
-
-      const overlayMsg = document.getElementById('overlayMsg');
-
-      const video = document.getElementById('video');
-      const canvas = document.getElementById('canvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-      const latestTime = document.getElementById('latestTime');
-      const latestRaw  = document.getElementById('latestRaw');
-      const latestParsed = document.getElementById('latestParsed');
-
-      const historyBody = document.getElementById('historyBody');
-      const histDot = document.getElementById('histDot');
-      const histCount = document.getElementById('histCount');
-
-      // ====== State ======
-      let stream = null;
-      let scanning = false;
-      let rafId = null;
-
-      const history = []; // persists until reload
-
-      // Tech selection
-      const hasBarcodeDetector = ('BarcodeDetector' in window);
-      let detector = null;
-
-      // ZXing fallback
-      let zxingReader = null;
-      let zxingActive = false;
-
-      // ====== Helpers ======
-      const pad2 = (n) => String(n).padStart(2, '0');
-      const formatTime = (d) =>
-        `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ` +
-        `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
-
-      function setStatus(kind, text){
-        statusText.textContent = text;
-        statusDot.className = 'dot';
-        if (kind === 'ok') statusDot.classList.add('ok');
-        if (kind === 'busy') statusDot.classList.add('busy');
-        if (kind === 'err') statusDot.classList.add('err');
-      }
-
-      function updateHistoryBadge(){
-        histCount.textContent = `${history.length} 件`;
-        histDot.className = 'dot';
-        if (history.length === 0) {
-          histDot.style.background = 'rgba(255,255,255,.35)';
-        } else {
-          histDot.classList.add('ok');
-        }
-      }
-
-      function escapeHtml(s){
-        return String(s)
-          .replaceAll('&', '&amp;')
-          .replaceAll('<', '&lt;')
-          .replaceAll('>', '&gt;')
-          .replaceAll('"', '&quot;')
-          .replaceAll("'", '&#39;');
-      }
-
-      // Normalize GS1 string:
-      // - Keep original raw for display
-      // - For parsing: convert "(01)..." style to "01..." with group separators where needed is hard;
-      //   we'll handle both:
-      //   1) Parentheses style: read AI inside () explicitly.
-      //   2) FNC1 style: includes ASCII 29 (GS) separators.
-      function normalizeForDisplay(raw){
-        // Replace ASCII 29 with visible token
-        return raw.replaceAll('\u001d', '␝(GS)');
-      }
-
-      function detectKind(format){
-        // Map some common format labels
-        const f = (format || '').toLowerCase();
-        if (!f) return 'unknown';
-        if (f.includes('data')) return 'DataMatrix';
-        if (f.includes('qr')) return 'QR';
-        if (f.includes('ean')) return 'EAN';
-        if (f.includes('code_128') || f.includes('code128') || f.includes('128')) return 'Code128';
-        if (f.includes('itf')) return 'ITF';
-        return format;
-      }
-
-      // ====== GS1 parsing (simple) ======
-      // Common AI definitions (fixed length) + variable length (ends at GS (ASCII29) or end)
-      const GS = '\u001d';
-      const fixedAIs = new Map([
-        ['00', 18],
-        ['01', 14],
-        ['02', 14],
-        ['11', 6],
-        ['12', 6],
-        ['13', 6],
-        ['15', 6],
-        ['17', 6],
-        ['20', 2],
-        ['410', 13],
-        ['411', 13],
-        ['412', 13],
-        ['413', 13],
-        ['414', 13],
-        ['415', 13],
-        ['416', 13],
-        ['7003', 10], // example
-      ]);
-
-      const variableAIs = new Map([
-        ['10', 20],   // batch/lot
-        ['21', 20],   // serial
-        ['30', 8],    // variable count
-        ['37', 8],    // count
-        ['240', 30],
-        ['241', 30],
-        ['242', 6],
-        ['400', 30],
-        ['401', 30],
-      ]);
-
-      // Try parse parentheses format: (01)xxxxxxxxxxxxxx(17)YYMMDD(10)LOT...
-      function parseParenthesesGS1(raw){
-        const out = [];
-        const re = /\((\d{2,4})\)/g;
-        let match;
-        let lastIndex = 0;
-        let lastAI = null;
-
-        while ((match = re.exec(raw)) !== null) {
-          const ai = match[1];
-          const aiStart = match.index;
-          if (lastAI !== null) {
-            const value = raw.slice(lastIndex, aiStart);
-            out.push({ ai: lastAI, value });
-          }
-          lastAI = ai;
-          lastIndex = re.lastIndex;
-        }
-        if (lastAI !== null) {
-          out.push({ ai: lastAI, value: raw.slice(lastIndex) });
-        }
-
-        // Basic cleanup
-        const cleaned = out
-          .map(x => ({ ai: x.ai, value: x.value.trim() }))
-          .filter(x => x.value.length > 0);
-
-        return cleaned.length ? cleaned : null;
-      }
-
-      // Parse FNC1 style: "01" + 14 + "17" + 6 + "10" + var + GS + "21" + var ...
-      function parseFNC1GS1(raw){
-        // Keep only digits, letters, allowed separators (GS). Many scans provide plain text already.
-        // We will not strip letters because variable AIs can be alphanumeric.
-        let s = raw;
-
-        const parts = [];
-        let i = 0;
-
-        function peekAI(){
-          // Try 4,3,2 digits in that order
-          for (const len of [4,3,2]) {
-            const ai = s.slice(i, i+len);
-            if (/^\d+$/.test(ai) && (fixedAIs.has(ai) || variableAIs.has(ai))) return ai;
-          }
-          return null;
-        }
-
-        while (i < s.length) {
-          // Skip group separator
-          if (s[i] === GS) { i++; continue; }
-
-          const ai = peekAI();
-          if (!ai) break;
-
-          i += ai.length;
-
-          if (fixedAIs.has(ai)) {
-            const n = fixedAIs.get(ai);
-            const value = s.slice(i, i+n);
-            if (value.length < n) break;
-            parts.push({ ai, value });
-            i += n;
-            continue;
-          }
-
-          if (variableAIs.has(ai)) {
-            const maxLen = variableAIs.get(ai);
-            let end = i;
-            let count = 0;
-            while (end < s.length && s[end] !== GS && count < maxLen) {
-              end++; count++;
-            }
-            const value = s.slice(i, end);
-            parts.push({ ai, value });
-            i = end;
-            continue;
-          }
-        }
-
-        return parts.length ? parts : null;
-      }
-
-      function parseGS1(raw){
-        // 1) parentheses style
-        const p1 = parseParenthesesGS1(raw);
-        if (p1) return p1;
-
-        // 2) FNC1 style
-        const p2 = parseFNC1GS1(raw);
-        if (p2) return p2;
-
-        return null;
-      }
-
-      function renderParsed(parsed){
-        if (!parsed) return `<span class="small warn">解析できません（生データは履歴に保存されています）</span>`;
-
-        const labels = {
-          '00': 'SSCC',
-          '01': 'GTIN',
-          '02': '内容物GTIN',
-          '10': 'ロット/バッチ',
-          '11': '製造日(YYMMDD)',
-          '12': '支払期日(YYMMDD)',
-          '13': '包装日(YYMMDD)',
-          '15': '最低賞味期限(YYMMDD)',
-          '17': '有効期限(YYMMDD)',
-          '20': 'バリアント',
-          '21': 'シリアル',
-          '30': '数量(可変)',
-          '37': '個数(可変)',
-          '240': '追加製品ID',
-          '241': '顧客部品番号',
-          '242': '製造番号(短)',
-          '400': '発注番号',
-          '401': '出荷番号',
-          '410': '出荷先GLN',
-          '414': '物理的所在地GLN',
-          '415': '請求先GLN',
-          '416': '生産/サービス所在地GLN',
-          '7003': '有効期限(YYYYMMDD?)'
-        };
-
-        const rows = parsed.map(({ai, value}) => {
-          const label = labels[ai] || '不明AI';
-          return `<div style="margin:0 0 6px;">
-            <span class="tag">AI ${escapeHtml(ai)}</span>
-            <span class="small">${escapeHtml(label)}</span><br>
-            <span class="mono">${escapeHtml(value)}</span>
-          </div>`;
-        }).join('');
-
-        return rows || `<span class="small warn">解析できません</span>`;
-      }
-
-      // ====== History render ======
-      function renderHistory(){
-        if (history.length === 0) {
-          historyBody.innerHTML = `<tr><td colspan="3" class="small">まだ読み取り履歴がありません。</td></tr>`;
-          updateHistoryBadge();
-          return;
-        }
-
-        historyBody.innerHTML = history.map(item => {
-          const parsed = item.parsed;
-          const parsedTags = parsed
-            ? parsed.slice(0, 5).map(p => `<span class="tag">${escapeHtml(p.ai)}</span>`).join('')
-            : `<span class="small warn">解析なし</span>`;
-
-          return `
-            <tr>
-              <td>${escapeHtml(item.time)}</td>
-              <td>${escapeHtml(item.formatLabel)}</td>
-              <td>
-                <div class="mono">${escapeHtml(item.rawDisplay)}</div>
-                <div style="margin-top:6px;">${parsedTags}</div>
-              </td>
-            </tr>
-          `;
-        }).join('');
-        updateHistoryBadge();
-      }
-
-      // ====== Camera control ======
-      async function startCamera(){
-        if (scanning) return;
-
-        try {
-          setStatus('busy', 'カメラ起動中…');
-          overlayMsg.innerHTML = 'カメラを起動しました。<br>バーコードを枠内に入れてください。';
-
-          // Request back camera if possible
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            },
-            audio: false
-          });
-
-          video.srcObject = stream;
-          await video.play();
-
-          btnStart.disabled = true;
-          btnStop.disabled = false;
-
-          scanning = true;
-
-          // Prepare detector
-          if (hasBarcodeDetector) {
-            const formats = [
-              'data_matrix',
-              'qr_code',
-              'code_128',
-              'ean_13',
-              'ean_8',
-              'itf',
-              'upc_a',
-              'upc_e'
-            ];
-            try {
-              detector = new BarcodeDetector({ formats });
-              techPill.textContent = '技術: BarcodeDetector';
-            } catch (e) {
-              detector = null;
-            }
-          }
-
-          // If BarcodeDetector not available / failed, use ZXing
-          if (!detector) {
-            if (window.ZXing && window.ZXing.BrowserMultiFormatReader) {
-              zxingReader = new ZXing.BrowserMultiFormatReader();
-              techPill.textContent = '技術: ZXing(フォールバック)';
-            } else {
-              throw new Error('バーコード検出機能が利用できません（ZXingの読み込みに失敗しました）。');
-            }
-          }
-
-          setStatus('busy', '読み取り中…');
-          if (detector) {
-            scanLoopBarcodeDetector();
-          } else {
-            scanLoopZXing();
-          }
-
-        } catch (err) {
-          stopCamera();
-          setStatus('err', 'エラー');
-          overlayMsg.innerHTML = `<span class="errText">カメラの起動に失敗しました。</span><br>${escapeHtml(err.message || String(err))}`;
-        }
-      }
-
-      function stopCamera(){
-        scanning = false;
-
-        if (rafId) cancelAnimationFrame(rafId);
-        rafId = null;
-
-        if (zxingReader && zxingActive) {
-          try { zxingReader.reset(); } catch (_) {}
-        }
-        zxingActive = false;
-
-        if (video) {
-          try { video.pause(); } catch (_) {}
-          video.srcObject = null;
-        }
-        if (stream) {
-          for (const t of stream.getTracks()) t.stop();
-          stream = null;
-        }
-
-        btnStart.disabled = false;
-        btnStop.disabled = true;
-
-        techPill.textContent = hasBarcodeDetector ? '技術: BarcodeDetector/ZXing' : '技術: ZXing';
-        overlayMsg.innerHTML = '待機中です。<br>必要に応じて「読み取り開始」を押してください。';
-
-        setStatus('ok', '待機中');
-      }
-
-      function onDetected({ rawValue, format }){
-        // Stop camera immediately (requirement: only between start click and first read)
-        const time = new Date();
-        const t = formatTime(time);
-
-        const parsed = parseGS1(rawValue);
-        const formatLabel = detectKind(format);
-
-        const item = {
-          time: t,
-          formatLabel,
-          raw: rawValue,
-          rawDisplay: normalizeForDisplay(rawValue),
-          parsed
-        };
-
-        history.unshift(item);
-
-        // Update latest
-        latestTime.textContent = t;
-        latestRaw.textContent = normalizeForDisplay(rawValue);
-        latestParsed.innerHTML = renderParsed(parsed);
-
-        // Update history list
-        renderHistory();
-
-        setStatus('ok', '読み取り完了');
-        overlayMsg.innerHTML = `<span class="okText">読み取り完了。</span><br>カメラを停止しました。`;
-
-        stopCamera();
-      }
-
-      // ====== Scan loops ======
-      async function scanLoopBarcodeDetector(){
-        if (!scanning || !detector) return;
-
-        // Ensure canvas matches video
-        const w = video.videoWidth || 1280;
-        const h = video.videoHeight || 720;
-        canvas.width = w;
-        canvas.height = h;
-
-        const loop = async () => {
-          if (!scanning) return;
-
-          try {
-            // BarcodeDetector can detect from video directly in some browsers
-            // but to be safer, we draw into canvas and pass ImageData.
-            ctx.drawImage(video, 0, 0, w, h);
-            const img = ctx.getImageData(0, 0, w, h);
-            const barcodes = await detector.detect(img);
-
-            if (barcodes && barcodes.length > 0) {
-              const b = barcodes[0];
-              onDetected({ rawValue: b.rawValue, format: b.format });
-              return;
-            }
-          } catch (e) {
-            // If detect fails repeatedly, show warning but keep trying
-            // (Do not spam UI)
-          }
-
-          rafId = requestAnimationFrame(loop);
-        };
-
-        rafId = requestAnimationFrame(loop);
-      }
-
-      function scanLoopZXing(){
-        if (!scanning || !zxingReader) return;
-
-        zxingActive = true;
-
-        // ZXing async continuous decode from video element
-        zxingReader.decodeFromVideoElementContinuously(video, (result, err) => {
-          if (!scanning) return;
-          if (result) {
-            // result.getText() includes the raw string (may include GS separators)
-            const rawValue = result.getText();
-            // result.getBarcodeFormat() returns an enum; convert to string
-            const format = String(result.getBarcodeFormat ? result.getBarcodeFormat() : 'unknown');
-            onDetected({ rawValue, format });
-          }
-          // ignore err (not found, etc.)
-        });
-      }
-
-      // ====== UI actions ======
-      btnStart.addEventListener('click', startCamera);
-      btnStop.addEventListener('click', () => {
-        setStatus('ok', '停止');
-        overlayMsg.innerHTML = '停止しました。<br>「読み取り開始」で再度起動できます。';
-        stopCamera();
-      });
-
-      btnClear.addEventListener('click', () => {
-        history.length = 0;
-        latestTime.textContent = '—';
-        latestRaw.textContent = '—';
-        latestParsed.innerHTML = '<span class="small">—</span>';
-        renderHistory();
-      });
-
-      // ====== Support hint ======
-      function initSupportText(){
-        const secure = (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-        const md = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-
-        const lines = [];
-        if (!secure) lines.push('⚠ HTTPS（または localhost）で開いてください（カメラ権限に必要）。');
-        if (!md) lines.push('⚠ このブラウザは getUserMedia 非対応です。');
-        if (hasBarcodeDetector) lines.push('✅ BarcodeDetector 対応（標準API）');
-        else lines.push('ℹ BarcodeDetector 非対応 → ZXing フォールバックを使用');
-
-        supportHint.innerHTML = lines.map(x => escapeHtml(x)).join(' / ');
-        techPill.textContent = hasBarcodeDetector ? '技術: BarcodeDetector/ZXing' : '技術: ZXing';
-
-        if (!secure || !md) {
-          setStatus('err', '要件未満');
-          overlayMsg.innerHTML =
-            `<span class="errText">カメラを使うには条件があります。</span><br>` +
-            `・HTTPS で開く（または localhost）<br>` +
-            `・対応ブラウザで開く（Chrome/Edge/Android 等が比較的安定）`;
-          btnStart.disabled = true;
-        } else {
-          setStatus('ok', '待機中');
-        }
-      }
-
-      // ====== Boot ======
-      renderHistory();
-      initSupportText();
-
-      // Stop camera if page is hidden (safety)
-      document.addEventListener('visibilitychange', () => {
-        if (document.hidden && scanning) stopCamera();
-      });
-    })();
-  </script>
 </body>
 </html>
