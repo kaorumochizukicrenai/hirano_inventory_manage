@@ -3,176 +3,153 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GS1 調剤薬局ツール</title>
+<title>GS1 医療用バーコードツール</title>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 
 <style>
-:root{
-  --primary:#2563eb;
-  --bg:#f5f7fb;
-  --card:#ffffff;
-  --danger:#dc2626;
-}
-
 body{
   margin:0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background:var(--bg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background:#f4f6fb;
   display:flex;
   justify-content:center;
   padding:20px;
 }
-
 .container{
   width:100%;
-  max-width:500px;
+  max-width:520px;
 }
-
 .card{
-  background:var(--card);
-  border-radius:16px;
+  background:#fff;
   padding:20px;
-  box-shadow:0 8px 24px rgba(0,0,0,0.08);
-  margin-bottom:20px;
+  border-radius:16px;
+  box-shadow:0 10px 25px rgba(0,0,0,0.08);
 }
-
 h1{
-  margin:0 0 15px;
   font-size:20px;
+  margin-bottom:15px;
 }
-
-select, button{
+select,button,input{
   width:100%;
   padding:12px;
   border-radius:10px;
-  border:none;
-  font-size:14px;
+  border:1px solid #ddd;
   margin-top:10px;
+  font-size:14px;
 }
-
-select{
-  background:#eef2ff;
-}
-
 button{
-  background:var(--primary);
-  color:white;
+  background:#2563eb;
+  color:#fff;
+  border:none;
   cursor:pointer;
-  transition:0.2s;
 }
-
-button:hover{
-  opacity:0.9;
-}
-
-button.danger{
-  background:var(--danger);
-}
-
+button:hover{opacity:0.9;}
+button.danger{background:#dc2626;}
 #reader{
-  width:100%;
+  margin-top:15px;
   border-radius:12px;
   overflow:hidden;
 }
-
 .result{
   margin-top:15px;
   font-size:14px;
 }
-
 .small{
   font-size:12px;
   color:#666;
-}
-
-@media (max-width:480px){
-  h1{ font-size:18px; }
 }
 </style>
 </head>
 <body>
 
 <div class="container">
-
 <div class="card">
-<h1>GS1バーコードツール</h1>
 
-<label>モード選択</label>
+<h1>GS1 医療用バーコードツール</h1>
+
 <select id="modeSelect">
-  <option value="save">データ保存モード</option>
-  <option value="search">検索モード</option>
+<option value="save">データ保存モード</option>
+<option value="search">検索モード</option>
 </select>
 
 <button id="cameraBtn">カメラ ON</button>
 <div id="reader" style="display:none;"></div>
 
 <div class="result" id="output"></div>
-<div class="small">保存データはブラウザ内に保持されます（localStorage）</div>
-</div>
+<div class="small">医療用GS1 (01)+(17) が含まれない場合は保存不可</div>
 
+</div>
 </div>
 
 <script>
-let db = JSON.parse(localStorage.getItem("gs1db") || "[]");
-let cameraActive = false;
+let db=JSON.parse(localStorage.getItem("gs1db")||"[]");
+let cameraActive=false;
 
 function saveDB(){
-  localStorage.setItem("gs1db", JSON.stringify(db));
+  localStorage.setItem("gs1db",JSON.stringify(db));
+}
+
+function validDateYYMMDD(v){
+  if(!/^\d{6}$/.test(v)) return false;
+  let y=2000+parseInt(v.slice(0,2));
+  let m=parseInt(v.slice(2,4));
+  let d=parseInt(v.slice(4,6));
+  let date=new Date(y,m-1,d);
+  return date.getFullYear()===y &&
+         date.getMonth()===m-1 &&
+         date.getDate()===d;
 }
 
 function parseGS1(data){
-  let gtin=null;
-  let expiry=null;
-
-  if(data.startsWith("01")){
-    gtin=data.substring(2,16);
-  }
-  let expMatch=data.match(/17(\d{6})/);
-  if(expMatch) expiry=expMatch[1];
-
-  return {gtin, expiry};
+  let cleaned=data.replace(/\x1D/g,""); // FNC1除去
+  let gtinMatch=cleaned.match(/01(\d{14})/);
+  let expMatch=cleaned.match(/17(\d{6})/);
+  return{
+    gtin:gtinMatch?gtinMatch[1]:null,
+    expiry:expMatch?expMatch[1]:null
+  };
 }
 
 function formatExpiry(e){
-  return "20"+e.substring(0,2)+"-"+e.substring(2,4)+"-"+e.substring(4,6);
+  return "20"+e.slice(0,2)+"-"+e.slice(2,4)+"-"+e.slice(4,6);
 }
 
 function handleScan(code){
-  let mode=document.getElementById("modeSelect").value;
   let parsed=parseGS1(code);
 
-  let gtin=parsed.gtin || prompt("GTIN(14桁)を入力してください");
-  let expiry=parsed.expiry || prompt("使用期限(YYMMDD)を入力してください");
-
-  if(!gtin || !expiry){
-    alert("入力が不完全です");
+  if(!parsed.gtin || !parsed.expiry){
+    alert("医療用GS1 (01)+(17) を含むバーコードではありません。");
     return;
   }
 
-  expiry=formatExpiry(expiry);
+  if(!validDateYYMMDD(parsed.expiry)){
+    alert("有効期限フォーマット不正です（YYMMDD）");
+    return;
+  }
+
+  let gtin=parsed.gtin;
+  let expiry=formatExpiry(parsed.expiry);
+  let mode=document.getElementById("modeSelect").value;
 
   if(mode==="save"){
     db.push({gtin,expiry});
     saveDB();
     document.getElementById("output").innerHTML=
-      "保存しました<br>GTIN: "+gtin+"<br>期限: "+expiry;
+      "保存完了<br>GTIN: "+gtin+"<br>期限: "+expiry;
   }
 
   if(mode==="search"){
     let matches=db.filter(x=>x.gtin===gtin);
-
     if(matches.length===0){
-      document.getElementById("output").innerHTML="該当商品なし";
+      document.getElementById("output").innerHTML="該当在庫なし";
       return;
     }
-
     let earliest=matches.reduce((a,b)=>a.expiry<b.expiry?a:b);
-
     document.getElementById("output").innerHTML=
       "該当件数: "+matches.length+"<br>"+
       "最短期限: "+earliest.expiry+"<br><br>"+
-      "<button class='danger' onclick='deleteCurrent(\""+gtin+"\",\""+expiry+"\")'>"+
-      "今読んだ期限データを削除</button>";
+      "<button class='danger' onclick='deleteCurrent(\""+gtin+"\",\""+expiry+"\")'>今読んだ期限を削除</button>";
   }
 }
 
@@ -192,13 +169,21 @@ function startCamera(){
     inputStream:{
       type:"LiveStream",
       target:document.querySelector("#reader"),
-      constraints:{ facingMode:"environment" }
+      constraints:{facingMode:"environment"}
     },
     decoder:{
-      readers:["code_128_reader"]
+      readers:[
+        "code_128_reader",
+        "ean_reader",
+        "ean_8_reader",
+        "upc_reader",
+        "upc_e_reader",
+        "itf_reader",
+        "codabar_reader"
+      ]
     }
   },function(err){
-    if(err){ console.log(err); return; }
+    if(err){console.log(err);return;}
     Quagga.start();
   });
 
@@ -219,11 +204,7 @@ function stopCamera(){
 }
 
 document.getElementById("cameraBtn").addEventListener("click",function(){
-  if(cameraActive){
-    stopCamera();
-  }else{
-    startCamera();
-  }
+  cameraActive?stopCamera():startCamera();
 });
 </script>
 
