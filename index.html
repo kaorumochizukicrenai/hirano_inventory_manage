@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>医療GS1在庫テスト</title>
+<title>医療GS1 撮影解析モード</title>
 
 <style>
 body{
   margin:0;
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto;
-  background:#f2f4f8;
+  background:#f4f6f9;
 }
 .container{
   max-width:600px;
@@ -22,153 +22,181 @@ body{
   border-radius:16px;
   box-shadow:0 6px 20px rgba(0,0,0,0.08);
 }
-video{
+video,canvas{
   width:100%;
   border-radius:12px;
   background:black;
-}
-.scan-frame{
-  position:absolute;
-  top:50%;
-  left:50%;
-  width:60%;
-  height:120px;
-  transform:translate(-50%,-50%);
-  border:3px solid #00c853;
-  border-radius:12px;
-  pointer-events:none;
-}
-.video-wrapper{
-  position:relative;
+  margin-top:10px;
 }
 button{
   width:100%;
-  padding:12px;
+  padding:14px;
   margin-top:10px;
   border:none;
   border-radius:12px;
   font-size:16px;
 }
 .primary{background:#007aff;color:white;}
-.danger{background:#ff3b30;color:white;}
 .status{
   margin-top:10px;
   font-weight:bold;
+}
+.result{
+  margin-top:10px;
+  word-break:break-all;
+  font-size:14px;
 }
 </style>
 </head>
 <body>
 
 <div class="container">
-<h2>医療GS1 在庫管理</h2>
+<h2>医療GS1 撮影解析モード</h2>
 
 <div class="card">
 
-<label><input type="radio" name="mode" value="save" checked> 保存モード</label>
-<label><input type="radio" name="mode" value="search"> 検索モード</label>
+<button class="primary" onclick="startCamera()">カメラ起動</button>
+<button class="primary" onclick="capturePhoto()">撮影して解析</button>
 
-<div class="video-wrapper">
-<video id="video" playsinline></video>
-<div class="scan-frame"></div>
-</div>
-
-<button class="primary" onclick="toggleCamera()">カメラ ON / OFF</button>
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas" style="display:none;"></canvas>
 
 <div class="status" id="status"></div>
+<div class="result" id="result"></div>
 
 </div>
 </div>
 
 <script type="module">
-import {
-  BrowserMultiFormatReader
-} from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.4/+esm";
 
+import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.4/+esm";
+
+let video = document.getElementById("video");
+let canvas = document.getElementById("canvas");
+let statusEl = document.getElementById("status");
+let resultEl = document.getElementById("result");
+
+let stream = null;
 let reader = new BrowserMultiFormatReader();
-let controls = null;
-let isCameraOn = false;
 
-const video = document.getElementById("video");
-const statusEl = document.getElementById("status");
-
-window.toggleCamera = async function(){
-
-  if(isCameraOn){
-    stopCamera();
-    return;
-  }
+window.startCamera = async function(){
 
   try{
-
-    statusEl.innerText="カメラ起動中...";
-
-    controls = await reader.decodeFromConstraints(
-      {
-        audio:false,
-        video:{
-          facingMode:{ exact:"environment" }, // 外カメ固定
-          width:{ ideal:1280 },
-          height:{ ideal:720 }
-        }
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{
+        facingMode:{ ideal:"environment" },
+        width:{ ideal:1920 },
+        height:{ ideal:1080 }
       },
-      video,
-      (result, err)=>{
-        if(result){
-          handleScan(result.getText());
-        }
-      }
-    );
+      audio:false
+    });
 
-    isCameraOn = true;
-    statusEl.innerText="スキャン待機中（枠内にバーコード）";
-
-  }catch(e){
-    alert("外カメ取得失敗。内カメで再試行します。");
-    fallbackCamera();
+    video.srcObject = stream;
+    statusEl.innerText = "カメラ起動完了";
+  }
+  catch(e){
+    alert("カメラ起動失敗：" + e);
   }
 };
 
-async function fallbackCamera(){
-  controls = await reader.decodeFromConstraints(
-    { video:true },
-    video,
-    (result, err)=>{
-      if(result){
-        handleScan(result.getText());
-      }
-    }
-  );
-  isCameraOn = true;
-}
+window.capturePhoto = async function(){
 
-function stopCamera(){
-  if(controls){
-    controls.stop();
-    controls=null;
+  if(!stream){
+    alert("先にカメラを起動してください");
+    return;
   }
-  video.srcObject=null;
-  isCameraOn=false;
-  statusEl.innerText="停止中";
+
+  statusEl.innerText = "撮影中...";
+
+  const context = canvas.getContext("2d");
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  context.drawImage(video,0,0);
+
+  // 前処理
+  preprocessImage(context, canvas.width, canvas.height);
+
+  statusEl.innerText = "解析中...";
+
+  try{
+
+    // 1回目
+    let result = await reader.decodeFromCanvas(canvas);
+
+    handleResult(result.getText());
+    return;
+
+  }catch{}
+
+  // 回転して再試行
+  try{
+    rotateCanvas(context, canvas);
+    let result = await reader.decodeFromCanvas(canvas);
+    handleResult(result.getText());
+    return;
+  }catch{}
+
+  alert("バーコードを読み取れませんでした");
+  statusEl.innerText = "失敗";
+};
+
+function preprocessImage(ctx,width,height){
+
+  let imageData = ctx.getImageData(0,0,width,height);
+  let data = imageData.data;
+
+  for(let i=0;i<data.length;i+=4){
+
+    let r=data[i];
+    let g=data[i+1];
+    let b=data[i+2];
+
+    // グレースケール
+    let gray=(r+g+b)/3;
+
+    // コントラスト強化
+    gray = gray > 128 ? 255 : 0;
+
+    data[i]=data[i+1]=data[i+2]=gray;
+  }
+
+  ctx.putImageData(imageData,0,0);
 }
 
-function handleScan(text){
+function rotateCanvas(ctx,canvas){
+
+  let temp=document.createElement("canvas");
+  temp.width=canvas.height;
+  temp.height=canvas.width;
+
+  let tctx=temp.getContext("2d");
+  tctx.translate(temp.width/2,temp.height/2);
+  tctx.rotate(Math.PI/2);
+  tctx.drawImage(canvas,-canvas.width/2,-canvas.height/2);
+
+  canvas.width=temp.width;
+  canvas.height=temp.height;
+
+  ctx.drawImage(temp,0,0);
+}
+
+function handleResult(text){
+
+  resultEl.innerText = text;
 
   const parsed = parseGS1(text);
 
   if(!parsed){
-    alert("医療用GS1コードではありません");
+    alert("医療用GS1ではありません");
+    statusEl.innerText="非対応コード";
     return;
   }
 
-  stopCamera();
+  statusEl.innerText="医療GS1検出成功";
 
-  const mode=document.querySelector("input[name='mode']:checked").value;
-
-  if(mode==="save"){
-    saveData(parsed);
-  }else{
-    searchData(parsed);
-  }
+  alert("GTIN:"+parsed.gtin+"\n有効期限:"+parsed.expiry);
 }
 
 function parseGS1(text){
@@ -190,35 +218,6 @@ function parseGS1(text){
   };
 }
 
-function saveData(data){
-  let db=JSON.parse(localStorage.getItem("medicalDB")||"[]");
-  db.push(data);
-  localStorage.setItem("medicalDB",JSON.stringify(db));
-  alert("保存完了\n"+data.gtin+"\n期限:"+data.expiry);
-}
-
-function searchData(data){
-  let db=JSON.parse(localStorage.getItem("medicalDB")||"[]");
-  const matches=db.filter(d=>d.gtin===data.gtin);
-
-  if(matches.length===0){
-    alert("該当なし");
-    return;
-  }
-
-  const sorted=[...matches].sort((a,b)=>a.expiry.localeCompare(b.expiry));
-  const earliest=sorted[0];
-
-  if(confirm("最短期限:"+earliest.expiry+"\n今回:"+data.expiry+"\n削除しますか？")){
-    const idx=db.findIndex(d=>d.gtin===data.gtin&&d.expiry===data.expiry);
-    if(idx!==-1){
-      db.splice(idx,1);
-      localStorage.setItem("medicalDB",JSON.stringify(db));
-      alert("削除しました");
-    }
-  }
-}
 </script>
-
 </body>
 </html>
