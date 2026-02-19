@@ -2,249 +2,303 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>医療バーコード在庫管理SPA</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventory SPA</title>
+
 <style>
-body{font-family:sans-serif;margin:0;background:#f5f5f5}
-header{background:#1976d2;color:white;padding:10px;text-align:center}
-.screen{display:none;padding:20px}
-.active{display:block}
-button{margin:5px;padding:10px}
-input,textarea{margin:5px;padding:5px;width:90%}
-video{width:100%;max-height:300px;background:black}
-.warning{color:red;font-weight:bold}
-.success{color:green}
-.card{background:white;padding:10px;margin:5px;border-radius:5px}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  margin: 0;
+  background: #f4f6f9;
+}
+header {
+  background: #1f2937;
+  color: white;
+  padding: 15px;
+  text-align: center;
+  font-size: 18px;
+}
+.container {
+  padding: 15px;
+  max-width: 900px;
+  margin: auto;
+}
+button {
+  padding: 12px;
+  margin: 5px 0;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  font-size: 16px;
+}
+button.secondary {
+  background: #6b7280;
+}
+input, textarea, select {
+  width: 100%;
+  padding: 10px;
+  margin: 5px 0 15px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+}
+video, canvas {
+  width: 100%;
+  border-radius: 8px;
+}
+.card {
+  background: white;
+  padding: 10px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.warning {
+  color: red;
+  font-weight: bold;
+}
+@media(min-width:768px){
+  button { width:auto; min-width:200px; }
+}
+.hidden { display:none; }
 </style>
 </head>
 <body>
 
-<header>医療バーコード在庫管理</header>
+<header>在庫管理SPA</header>
+<div class="container">
 
 <!-- HOME -->
-<div id="home" class="screen active">
-<button onclick="go('view')">データ閲覧</button>
-<button onclick="go('save')">バーコード保存</button>
-<button onclick="go('search')">バーコード照会</button>
-<button onclick="go('api')">API情報</button>
+<div id="home">
+  <button onclick="showView('viewData')">データ閲覧</button>
+  <button onclick="showView('saveBarcode')">バーコード保存</button>
+  <button onclick="showView('lookupBarcode')">バーコード照会</button>
+  <button onclick="showView('apiInfo')">API情報</button>
 </div>
 
-<!-- VIEW -->
-<div id="view" class="screen">
-<h3>保存データ</h3>
-<div id="dataList"></div>
-<button onclick="go('home')">戻る</button>
+<!-- API INFO -->
+<div id="apiInfo" class="hidden">
+  <h3>API情報</h3>
+  <input id="apiKey" placeholder="Gemini API Key">
+  <textarea id="prompt"></textarea>
+  <button onclick="saveAPI()">保存</button>
+  <button class="secondary" onclick="goHome()">戻る</button>
 </div>
 
 <!-- SAVE -->
-<div id="save" class="screen">
-<h3>バーコード保存</h3>
-<video id="video" autoplay></video>
-<button onclick="captureAndSend('save')">読み取り</button>
+<div id="saveBarcode" class="hidden">
+  <h3>バーコード保存</h3>
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas" class="hidden"></canvas>
+  <button onclick="captureAndSend('save')">撮影して解析</button>
 
-<h4>手動入力</h4>
-<input id="manualProduct" placeholder="商品種別">
-<input id="manualGTIN" placeholder="GTIN(任意)">
-<input id="manualExpiry" placeholder="有効期限 YYYY-MM-DD">
-<button onclick="manualSubmit('save')">手動保存</button>
+  <h4>手動入力</h4>
+  <input id="manualBarcode" placeholder="バーコード番号を入力">
 
-<div id="saveResult"></div>
-<button onclick="go('home')">戻る</button>
+  <input id="category" placeholder="商品種別（必須）">
+  <input id="expiry" type="date" placeholder="期限（必須）">
+  <div id="saveResult"></div>
+
+  <button class="secondary" onclick="goHome()">戻る</button>
 </div>
 
-<!-- SEARCH -->
-<div id="search" class="screen">
-<h3>バーコード照会</h3>
-<video id="video2" autoplay></video>
-<button onclick="captureAndSend('search')">読み取り</button>
+<!-- LOOKUP -->
+<div id="lookupBarcode" class="hidden">
+  <h3>バーコード照会</h3>
+  <video id="video2" autoplay playsinline></video>
+  <canvas id="canvas2" class="hidden"></canvas>
+  <button onclick="captureAndSend('lookup')">撮影して解析</button>
 
-<h4>手動入力</h4>
-<input id="manualProduct2" placeholder="商品種別">
-<input id="manualGTIN2" placeholder="GTIN(任意)">
-<input id="manualExpiry2" placeholder="有効期限 YYYY-MM-DD">
-<button onclick="manualSubmit('search')">手動照会</button>
+  <input id="manualLookup" placeholder="手動入力">
+  <div id="lookupResult"></div>
 
-<div id="searchResult"></div>
-<button onclick="go('home')">戻る</button>
+  <button class="secondary" onclick="goHome()">戻る</button>
 </div>
 
-<!-- API -->
-<div id="api" class="screen">
-<h3>Gemini API設定</h3>
-<input id="apiKey" placeholder="APIキー">
-<textarea id="prompt" rows="10"></textarea>
-<button onclick="saveAPI()">保存</button>
-<button onclick="go('home')">戻る</button>
+<!-- VIEW DATA -->
+<div id="viewData" class="hidden">
+  <h3>保存データ</h3>
+  <div id="dataList"></div>
+  <button class="secondary" onclick="goHome()">戻る</button>
+</div>
+
 </div>
 
 <script>
-
-let stream=null;
-let tempData=[];
+let stream = null;
+let currentMode = null;
+let inventory = [];
 
 const defaultPrompt = `
-あなたは医療バーコード解析AIです。
+あなたは医療用バーコード解析AIです。
 
-画像から以下を抽出してください：
-1. GS1バーコード優先
-2. 読めない場合は数字から推測
-3. 14桁数字をGTINとみなす
-4. 6桁YYMMDDを有効期限とみなす
-5. YYYY-MM-DDへ変換
-6. 医療製品名から商品種別推測
-7. 不明でも必ず推測値を出す
+【最重要】
+・不明確な場合は null を返してください。
+・推測は禁止。
+・数字がぼやけている場合は絶対に補完しない。
+・バーコードが視認できない場合は null。
 
-必ずJSONのみ出力：
+画像内から読み取れるバーコード値のみ返してください。
 
+JSON形式:
 {
-"type":"医療" または "非医療",
-"productType":"商品種別",
-"gtin":"値",
-"expiry":"YYYY-MM-DD",
-"confidence":0-1
+ "barcode": "数値 or null",
+ "confidence": 0.0〜1.0
 }
 `;
 
-if(!localStorage.getItem("gemini_prompt")){
-localStorage.setItem("gemini_prompt",defaultPrompt);
+function initAPIFields(){
+  document.getElementById("prompt").value =
+    localStorage.getItem("prompt") || defaultPrompt;
+  document.getElementById("apiKey").value =
+    localStorage.getItem("apiKey") || "";
+}
+initAPIFields();
+
+function saveAPI(){
+  localStorage.setItem("apiKey", document.getElementById("apiKey").value);
+  localStorage.setItem("prompt", document.getElementById("prompt").value);
+  alert("保存しました");
 }
 
-function go(id){
-document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
-document.getElementById(id).classList.add("active");
-if(id==="save") startCamera("video");
-if(id==="search") startCamera("video2");
-if(id==="home"||id==="view"||id==="api") stopCamera();
-if(id==="view") renderData();
-if(id==="api"){
-document.getElementById("apiKey").value=localStorage.getItem("gemini_key")||"";
-document.getElementById("prompt").value=localStorage.getItem("gemini_prompt");
+function showView(id){
+  stopCamera();
+  document.querySelectorAll(".container > div").forEach(d=>d.classList.add("hidden"));
+  document.getElementById(id).classList.remove("hidden");
+  if(id==="saveBarcode") startCamera("video");
+  if(id==="lookupBarcode") startCamera("video2");
+  if(id==="viewData") renderData();
 }
+
+function goHome(){
+  stopCamera();
+  showView("home");
 }
 
 async function startCamera(videoId){
-stopCamera();
-stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-document.getElementById(videoId).srcObject=stream;
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: "environment" } }
+  });
+  document.getElementById(videoId).srcObject = stream;
 }
 
 function stopCamera(){
-if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  if(stream){
+    stream.getTracks().forEach(t=>t.stop());
+    stream = null;
+  }
 }
 
 async function captureAndSend(mode){
-let video=mode==="save"?document.getElementById("video"):document.getElementById("video2");
-let canvas=document.createElement("canvas");
-canvas.width=video.videoWidth;
-canvas.height=video.videoHeight;
-canvas.getContext("2d").drawImage(video,0,0);
-let base64=canvas.toDataURL("image/jpeg").split(",")[1];
+  currentMode = mode;
+  const key = localStorage.getItem("apiKey");
+  const prompt = localStorage.getItem("prompt");
 
-let key=localStorage.getItem("gemini_key");
-if(!key){alert("APIキー未設定");return;}
+  if(!key){ alert("APIキー未設定"); return; }
 
-let response=await fetch(
-`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent?key=${key}`,
-{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({
-contents:[{
-parts:[
-{text:localStorage.getItem("gemini_prompt")},
-{inlineData:{mimeType:"image/jpeg",data:base64}}
-]
-}]
-})
-}
-);
+  const video = mode==="save" ? video : video2;
+  const canvas = mode==="save" ?
+    document.getElementById("canvas") :
+    document.getElementById("canvas2");
 
-let result=await response.json();
-let text=result.candidates?.[0]?.content?.parts?.[0]?.text;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video,0,0);
 
-try{
-let json=JSON.parse(text);
-handleResult(json,mode);
-}catch{
-alert("解析失敗\n"+text);
-}
-}
+  const base64 = canvas.toDataURL("image/jpeg").split(",")[1];
 
-function handleResult(data,mode){
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent?key=${key}`,
+  {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({
+      contents:[{
+        parts:[
+          { text: prompt },
+          { inline_data:{ mime_type:"image/jpeg", data: base64 } }
+        ]
+      }]
+    })
+  });
 
-let confidence=parseFloat(data.confidence)||0;
-let target=mode==="save"?"saveResult":"searchResult";
-let div=document.getElementById(target);
-
-div.innerHTML="";
-
-if(confidence<0.5){
-div.innerHTML=`<p class="warning">信頼度が低い(${confidence}) 手動入力推奨</p>`;
-return;
+  const data = await res.json();
+  try{
+    const text = data.candidates[0].content.parts[0].text;
+    const json = JSON.parse(text);
+    handleResult(json);
+  }catch(e){
+    alert("解析不能");
+  }
 }
 
-if(confidence<0.8){
-if(!confirm(`信頼度${confidence}です。続行しますか？`)) return;
+function handleResult(json){
+  if(!json.barcode){
+    alert("バーコード解析不能");
+    return;
+  }
+
+  if(json.confidence < 0.8){
+    alert("⚠ confidence低: "+json.confidence);
+  }
+
+  if(currentMode==="save"){
+    const category = document.getElementById("category").value;
+    const expiry = document.getElementById("expiry").value;
+    if(!category || !expiry){
+      alert("種別と期限必須");
+      return;
+    }
+    inventory.push({
+      barcode: json.barcode,
+      category,
+      expiry
+    });
+    document.getElementById("saveResult").innerText =
+      "保存: "+json.barcode;
+  }
+
+  if(currentMode==="lookup"){
+    const found = inventory.filter(i=>i.barcode===json.barcode);
+    if(found.length===0){
+      document.getElementById("lookupResult").innerText =
+        "該当なし";
+      return;
+    }
+    const nearest = found.sort((a,b)=>
+      new Date(a.expiry)-new Date(b.expiry))[0];
+
+    document.getElementById("lookupResult").innerHTML =
+      `最短期限: ${nearest.expiry}
+      <button onclick="useItem('${nearest.barcode}','${nearest.expiry}')">
+      使用済みにする</button>`;
+  }
 }
 
-if(mode==="save"){
-if(!data.productType||!data.expiry){
-alert("商品種別と期限は必須");
-return;
-}
-tempData.push(data);
-div.innerHTML=`<p class="success">保存完了</p>`;
-}
-
-if(mode==="search"){
-let same=tempData.filter(d=>d.productType===data.productType);
-if(same.length===0){
-div.innerHTML="該当なし";
-return;
-}
-same.sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));
-let nearest=same[0];
-div.innerHTML=`
-<p>最短期限: ${nearest.expiry}</p>
-<button onclick="useItem('${nearest.expiry}','${nearest.productType}')">使用済みにする</button>
-`;
-}
-}
-
-function useItem(expiry,product){
-tempData=tempData.filter(d=>!(d.expiry===expiry&&d.productType===product));
-alert("削除しました");
-go("view");
+function useItem(barcode, expiry){
+  inventory = inventory.filter(i=>
+    !(i.barcode===barcode && i.expiry===expiry));
+  alert("削除しました");
 }
 
 function renderData(){
-let list=document.getElementById("dataList");
-list.innerHTML="";
-tempData.forEach((d,i)=>{
-list.innerHTML+=`
-<div class="card">
-${d.productType} / ${d.expiry} / ${d.gtin||""}
-<button onclick="tempData.splice(${i},1);renderData()">削除</button>
-</div>
-`;
-});
+  const el = document.getElementById("dataList");
+  el.innerHTML="";
+  inventory.forEach((i,idx)=>{
+    el.innerHTML += `
+      <div class="card">
+        ${i.category}<br>
+        ${i.barcode}<br>
+        ${i.expiry}
+        <button onclick="inventory.splice(${idx},1);renderData();">
+        削除</button>
+      </div>
+    `;
+  });
 }
-
-function manualSubmit(mode){
-let p=document.getElementById(mode==="save"?"manualProduct":"manualProduct2").value;
-let g=document.getElementById(mode==="save"?"manualGTIN":"manualGTIN2").value;
-let e=document.getElementById(mode==="save"?"manualExpiry":"manualExpiry2").value;
-
-if(!p||!e){alert("商品種別と期限必須");return;}
-
-handleResult({productType:p,gtin:g,expiry:e,confidence:1},mode);
-}
-
-function saveAPI(){
-localStorage.setItem("gemini_key",document.getElementById("apiKey").value);
-localStorage.setItem("gemini_prompt",document.getElementById("prompt").value);
-alert("保存しました");
-}
-
 </script>
+
 </body>
 </html>
