@@ -6,144 +6,63 @@
 <title>GS1 医療在庫ツール</title>
 
 <script type="module">
-import {
-  BrowserMultiFormatReader,
-  BarcodeFormat,
-  DecodeHintType
-} from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.4/+esm";
+import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.4/+esm";
 
-const hints = new Map();
-hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-  BarcodeFormat.CODE_128,
-  BarcodeFormat.EAN_13,
-  BarcodeFormat.EAN_8,
-  BarcodeFormat.UPC_A,
-  BarcodeFormat.UPC_E,
-  BarcodeFormat.ITF,
-  BarcodeFormat.CODABAR,
-  BarcodeFormat.DATA_MATRIX,
-  BarcodeFormat.QR_CODE,
-  BarcodeFormat.RSS_14,
-  BarcodeFormat.RSS_EXPANDED
-]);
-
-const reader = new BrowserMultiFormatReader(hints);
-
+let reader = null;
 let controls = null;
-let cameraActive = false;
-let db = JSON.parse(localStorage.getItem("gs1db") || "[]");
+let currentDeviceId = null;
 
-function saveDB(){
-  localStorage.setItem("gs1db", JSON.stringify(db));
-}
+window.startCamera = async function () {
+  reader = new BrowserMultiFormatReader();
 
-function validDateYYMMDD(v){
-  if(!/^\d{6}$/.test(v)) return false;
-  let y=2000+parseInt(v.slice(0,2));
-  let m=parseInt(v.slice(2,4));
-  let d=parseInt(v.slice(4,6));
-  let date=new Date(y,m-1,d);
-  return date.getFullYear()===y &&
-         date.getMonth()===m-1 &&
-         date.getDate()===d;
-}
-
-function parseGS1(data){
-  let cleaned=data.replace(/\x1D/g,"");
-  let gtinMatch=cleaned.match(/01(\d{14})/);
-  let expMatch=cleaned.match(/17(\d{6})/);
-  return{
-    gtin:gtinMatch?gtinMatch[1]:null,
-    expiry:expMatch?expMatch[1]:null
-  };
-}
-
-function formatExpiry(e){
-  return "20"+e.slice(0,2)+"-"+e.slice(2,4)+"-"+e.slice(4,6);
-}
-
-function stopCamera(){
-  if(controls){
-    controls.stop();
-    controls = null;
-  }
-  cameraActive=false;
-  cameraBtn.innerText="カメラ ON";
-  video.style.display="none";
-}
-
-function handleScan(text){
-
-  const parsed=parseGS1(text);
-
-  if(!parsed.gtin || !parsed.expiry){
-    output.innerHTML="⚠ 医療用GS1ではありません";
-    return; // 停止しない
-  }
-
-  if(!validDateYYMMDD(parsed.expiry)){
-    output.innerHTML="⚠ 有効期限フォーマット不正";
-    return;
-  }
-
-  // ✅ 正常GS1のみ停止
-  stopCamera();
-
-  const gtin=parsed.gtin;
-  const expiry=formatExpiry(parsed.expiry);
-  const mode=modeSelect.value;
-
-  if(mode==="save"){
-    db.push({gtin,expiry});
-    saveDB();
-    output.innerHTML=
-      "✅ 保存完了<br>GTIN: "+gtin+"<br>期限: "+expiry;
-  }
-
-  if(mode==="search"){
-    let matches=db.filter(x=>x.gtin===gtin);
-    if(matches.length===0){
-      output.innerHTML="該当在庫なし";
-      return;
-    }
-    let earliest=matches.reduce((a,b)=>a.expiry<b.expiry?a:b);
-    output.innerHTML=
-      "該当件数: "+matches.length+"<br>"+
-      "最短期限: "+earliest.expiry+"<br><br>"+
-      "<button class='danger' onclick='deleteCurrent(\""+gtin+"\",\""+expiry+"\")'>"+
-      "今読んだ期限を削除</button>";
-  }
-}
-
-window.deleteCurrent=function(gtin,expiry){
-  let index=db.findIndex(x=>x.gtin===gtin && x.expiry===expiry);
-  if(index>=0){
-    db.splice(index,1);
-    saveDB();
-    alert("削除しました");
-  }else{
-    alert("該当データなし");
-  }
-}
-
-window.startCamera=async function(){
-  cameraActive=true;
-  cameraBtn.innerText="カメラ OFF";
-  video.style.display="block";
+  const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+  currentDeviceId = devices[0]?.deviceId;
 
   controls = await reader.decodeFromVideoDevice(
-    undefined,
-    "video",
-    (result,err)=>{
-      if(result){
-        handleScan(result.getText());
+    currentDeviceId,
+    'video',
+    (result, err) => {
+      if (result) {
+        const text = result.getText();
+        handleScan(text);
       }
     }
   );
+};
+
+window.stopCamera = function () {
+  if (controls) {
+    controls.stop();
+    controls = null;
+  }
+};
+
+window.toggleCamera = function () {
+  if (controls) {
+    stopCamera();
+  } else {
+    startCamera();
+  }
+};
+
+function handleScan(text) {
+  console.log("読み取り:", text);
+
+  // GS1判定
+  if (isMedicalGS1(text)) {
+    alert("医療用GS1コードです\n" + text);
+    stopCamera(); // 成功時自動停止
+  } else {
+    alert("医療用GS1ではありません");
+  }
 }
 
-window.toggleCamera=function(){
-  cameraActive?stopCamera():startCamera();
+// 医療GS1判定ロジック
+function isMedicalGS1(text) {
+  return (
+    text.includes("(01)") &&
+    text.includes("(17)")
+  );
 }
 </script>
 
