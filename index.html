@@ -2,189 +2,241 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>医療バーコードSPA</title>
+<title>医療バーコード在庫管理SPA</title>
 <style>
-body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto;background:#f4f6f9;}
-header{background:#007aff;color:white;padding:12px;text-align:center;font-size:18px;}
-.container{padding:16px;}
-button{width:100%;padding:14px;margin:8px 0;border:none;border-radius:12px;font-size:16px;background:#007aff;color:white;}
-.secondary{background:#666;}
-.card{background:white;padding:16px;border-radius:16px;box-shadow:0 6px 20px rgba(0,0,0,0.08);}
-video{width:100%;border-radius:12px;background:black;margin-top:10px;}
-input,textarea{width:100%;padding:10px;margin-top:6px;border-radius:8px;border:1px solid #ccc;}
-.item{border-bottom:1px solid #eee;padding:8px 0;}
-.hidden{display:none;}
+body{font-family:sans-serif;margin:0;background:#f5f5f5}
+header{background:#1976d2;color:white;padding:10px;text-align:center}
+.screen{display:none;padding:20px}
+.active{display:block}
+button{margin:5px;padding:10px}
+input,textarea{margin:5px;padding:5px;width:90%}
+video{width:100%;max-height:300px;background:black}
+.warning{color:red;font-weight:bold}
+.success{color:green}
+.card{background:white;padding:10px;margin:5px;border-radius:5px}
 </style>
 </head>
 <body>
 
-<header>医療バーコード管理</header>
-<div class="container">
+<header>医療バーコード在庫管理</header>
 
-<div id="home">
-<button onclick="showPage('view')">データ閲覧</button>
-<button onclick="showPage('save')">バーコード保存</button>
-<button onclick="showPage('search')">バーコード照会</button>
-<button onclick="showPage('api')">API情報</button>
+<!-- HOME -->
+<div id="home" class="screen active">
+<button onclick="go('view')">データ閲覧</button>
+<button onclick="go('save')">バーコード保存</button>
+<button onclick="go('search')">バーコード照会</button>
+<button onclick="go('api')">API情報</button>
 </div>
 
-<div id="view" class="hidden card">
-<h3>保存データ一覧</h3>
+<!-- VIEW -->
+<div id="view" class="screen">
+<h3>保存データ</h3>
 <div id="dataList"></div>
-<button class="secondary" onclick="showPage('home')">戻る</button>
+<button onclick="go('home')">戻る</button>
 </div>
 
-<div id="save" class="hidden card">
+<!-- SAVE -->
+<div id="save" class="screen">
 <h3>バーコード保存</h3>
-<video id="videoSave" autoplay playsinline></video>
+<video id="video" autoplay></video>
 <button onclick="captureAndSend('save')">読み取り</button>
+
+<h4>手動入力</h4>
+<input id="manualProduct" placeholder="商品種別">
+<input id="manualGTIN" placeholder="GTIN(任意)">
+<input id="manualExpiry" placeholder="有効期限 YYYY-MM-DD">
+<button onclick="manualSubmit('save')">手動保存</button>
+
 <div id="saveResult"></div>
-<button class="secondary" onclick="showPage('home')">戻る</button>
+<button onclick="go('home')">戻る</button>
 </div>
 
-<div id="search" class="hidden card">
+<!-- SEARCH -->
+<div id="search" class="screen">
 <h3>バーコード照会</h3>
-<video id="videoSearch" autoplay playsinline></video>
+<video id="video2" autoplay></video>
 <button onclick="captureAndSend('search')">読み取り</button>
+
+<h4>手動入力</h4>
+<input id="manualProduct2" placeholder="商品種別">
+<input id="manualGTIN2" placeholder="GTIN(任意)">
+<input id="manualExpiry2" placeholder="有効期限 YYYY-MM-DD">
+<button onclick="manualSubmit('search')">手動照会</button>
+
 <div id="searchResult"></div>
-<button class="secondary" onclick="showPage('home')">戻る</button>
+<button onclick="go('home')">戻る</button>
 </div>
 
-<div id="api" class="hidden card">
+<!-- API -->
+<div id="api" class="screen">
 <h3>Gemini API設定</h3>
-<label>APIキー</label>
-<input id="apiKey">
-<label>プロンプト</label>
-<textarea id="prompt" rows="5"></textarea>
+<input id="apiKey" placeholder="APIキー">
+<textarea id="prompt" rows="10"></textarea>
 <button onclick="saveAPI()">保存</button>
-<button class="secondary" onclick="showPage('home')">戻る</button>
-</div>
-
-<canvas id="canvas" class="hidden"></canvas>
-
+<button onclick="go('home')">戻る</button>
 </div>
 
 <script>
-let currentStream=null;
-let memoryDB=[];
 
-function showPage(page){
+let stream=null;
+let tempData=[];
 
-document.querySelectorAll(".card,#home").forEach(el=>el.classList.add("hidden"));
-document.getElementById(page).classList.remove("hidden");
+const defaultPrompt = `
+あなたは医療バーコード解析AIです。
 
-if(page==="save") startCamera("videoSave");
-if(page==="search") startCamera("videoSearch");
-if(page==="home"){ stopCamera(); }
+画像から以下を抽出してください：
+1. GS1バーコード優先
+2. 読めない場合は数字から推測
+3. 14桁数字をGTINとみなす
+4. 6桁YYMMDDを有効期限とみなす
+5. YYYY-MM-DDへ変換
+6. 医療製品名から商品種別推測
+7. 不明でも必ず推測値を出す
 
-if(page==="view"){ renderData(); }
+必ずJSONのみ出力：
 
+{
+"type":"医療" または "非医療",
+"productType":"商品種別",
+"gtin":"値",
+"expiry":"YYYY-MM-DD",
+"confidence":0-1
+}
+`;
+
+if(!localStorage.getItem("gemini_prompt")){
+localStorage.setItem("gemini_prompt",defaultPrompt);
+}
+
+function go(id){
+document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+document.getElementById(id).classList.add("active");
+if(id==="save") startCamera("video");
+if(id==="search") startCamera("video2");
+if(id==="home"||id==="view"||id==="api") stopCamera();
+if(id==="view") renderData();
+if(id==="api"){
+document.getElementById("apiKey").value=localStorage.getItem("gemini_key")||"";
+document.getElementById("prompt").value=localStorage.getItem("gemini_prompt");
+}
 }
 
 async function startCamera(videoId){
 stopCamera();
-currentStream=await navigator.mediaDevices.getUserMedia({
-video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},
-audio:false
-});
-document.getElementById(videoId).srcObject=currentStream;
+stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+document.getElementById(videoId).srcObject=stream;
 }
 
 function stopCamera(){
-if(currentStream){
-currentStream.getTracks().forEach(t=>t.stop());
-currentStream=null;
-}
+if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
 }
 
 async function captureAndSend(mode){
-
-let video=document.getElementById(mode==="save"?"videoSave":"videoSearch");
-let canvas=document.getElementById("canvas");
+let video=mode==="save"?document.getElementById("video"):document.getElementById("video2");
+let canvas=document.createElement("canvas");
 canvas.width=video.videoWidth;
 canvas.height=video.videoHeight;
-let ctx=canvas.getContext("2d");
-ctx.drawImage(video,0,0);
-
+canvas.getContext("2d").drawImage(video,0,0);
 let base64=canvas.toDataURL("image/jpeg").split(",")[1];
 
-let apiKey=localStorage.getItem("gemini_key");
-let prompt=localStorage.getItem("gemini_prompt");
+let key=localStorage.getItem("gemini_key");
+if(!key){alert("APIキー未設定");return;}
 
-if(!apiKey||!prompt){alert("API情報未設定");return;}
-
-let res=await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,{
+let response=await fetch(
+`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${key}`,
+{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({
 contents:[{
 parts:[
-{text:prompt},
-{inline_data:{mime_type:"image/jpeg",data:base64}}
+{text:localStorage.getItem("gemini_prompt")},
+{inlineData:{mimeType:"image/jpeg",data:base64}}
 ]
 }]
 })
-});
+}
+);
 
-let json=await res.json();
+let result=await response.json();
+let text=result.candidates?.[0]?.content?.parts?.[0]?.text;
 
 try{
-let text=json.candidates[0].content.parts[0].text;
-let data=JSON.parse(text);
-handleResult(data,mode);
-}catch(e){
-alert("解析失敗");
+let json=JSON.parse(text);
+handleResult(json,mode);
+}catch{
+alert("解析失敗\n"+text);
 }
-
 }
 
 function handleResult(data,mode){
 
-if(data.type!=="医療"||!data.productType||!data.expiry){
-alert("医療バーコードではありません");
+let confidence=parseFloat(data.confidence)||0;
+let target=mode==="save"?"saveResult":"searchResult";
+let div=document.getElementById(target);
+
+div.innerHTML="";
+
+if(confidence<0.5){
+div.innerHTML=`<p class="warning">信頼度が低い(${confidence}) 手動入力推奨</p>`;
 return;
 }
 
+if(confidence<0.8){
+if(!confirm(`信頼度${confidence}です。続行しますか？`)) return;
+}
+
 if(mode==="save"){
-memoryDB.push(data);
-document.getElementById("saveResult").innerText="保存成功："+data.productType+" "+data.expiry;
+if(!data.productType||!data.expiry){
+alert("商品種別と期限は必須");
+return;
+}
+tempData.push(data);
+div.innerHTML=`<p class="success">保存完了</p>`;
 }
 
 if(mode==="search"){
-
-let same=memoryDB.filter(d=>d.productType===data.productType);
-if(same.length===0){alert("該当なし");return;}
-
-same.sort((a,b)=>a.expiry.localeCompare(b.expiry));
+let same=tempData.filter(d=>d.productType===data.productType);
+if(same.length===0){
+div.innerHTML="該当なし";
+return;
+}
+same.sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));
 let nearest=same[0];
-
-let exactIndex=memoryDB.findIndex(d=>d.productType===data.productType&&d.expiry===data.expiry);
-
-let html="最短期限："+nearest.expiry+"<br>";
-
-if(exactIndex!==-1){
-html+="<button onclick='consume("+exactIndex+")'>今回分を使用済みにする</button>";
+div.innerHTML=`
+<p>最短期限: ${nearest.expiry}</p>
+<button onclick="useItem('${nearest.expiry}','${nearest.productType}')">使用済みにする</button>
+`;
+}
 }
 
-document.getElementById("searchResult").innerHTML=html;
-}
-
-}
-
-function consume(index){
-memoryDB.splice(index,1);
+function useItem(expiry,product){
+tempData=tempData.filter(d=>!(d.expiry===expiry&&d.productType===product));
 alert("削除しました");
-renderData();
+go("view");
 }
 
 function renderData(){
-let el=document.getElementById("dataList");
-el.innerHTML="";
-memoryDB.forEach((d,i)=>{
-el.innerHTML+=`<div class="item">${d.productType} - ${d.expiry}
-<button onclick="consume(${i})">削除</button></div>`;
+let list=document.getElementById("dataList");
+list.innerHTML="";
+tempData.forEach((d,i)=>{
+list.innerHTML+=`
+<div class="card">
+${d.productType} / ${d.expiry} / ${d.gtin||""}
+<button onclick="tempData.splice(${i},1);renderData()">削除</button>
+</div>
+`;
 });
+}
+
+function manualSubmit(mode){
+let p=document.getElementById(mode==="save"?"manualProduct":"manualProduct2").value;
+let g=document.getElementById(mode==="save"?"manualGTIN":"manualGTIN2").value;
+let e=document.getElementById(mode==="save"?"manualExpiry":"manualExpiry2").value;
+
+if(!p||!e){alert("商品種別と期限必須");return;}
+
+handleResult({productType:p,gtin:g,expiry:e,confidence:1},mode);
 }
 
 function saveAPI(){
@@ -193,11 +245,6 @@ localStorage.setItem("gemini_prompt",document.getElementById("prompt").value);
 alert("保存しました");
 }
 
-document.getElementById("apiKey").value=localStorage.getItem("gemini_key")||"";
-document.getElementById("prompt").value=localStorage.getItem("gemini_prompt")||"";
-
-showPage("home");
 </script>
-
 </body>
 </html>
