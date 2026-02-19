@@ -2,161 +2,228 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GS1 調剤薬局ツール</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+
 <style>
-body {
-  font-family: sans-serif;
-  margin: 20px;
+:root{
+  --primary:#2563eb;
+  --bg:#f5f7fb;
+  --card:#ffffff;
+  --danger:#dc2626;
 }
-h1 {
-  margin-bottom: 10px;
+
+body{
+  margin:0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background:var(--bg);
+  display:flex;
+  justify-content:center;
+  padding:20px;
 }
-#reader {
-  width: 100%;
-  max-width: 400px;
-  border: 1px solid #ccc;
+
+.container{
+  width:100%;
+  max-width:500px;
 }
-button {
-  margin: 5px 0;
-  padding: 10px;
-  width: 200px;
+
+.card{
+  background:var(--card);
+  border-radius:16px;
+  padding:20px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.08);
+  margin-bottom:20px;
 }
-.mode {
-  font-weight: bold;
-  margin-bottom: 10px;
+
+h1{
+  margin:0 0 15px;
+  font-size:20px;
 }
-.result {
-  margin-top: 10px;
-  padding: 10px;
-  background: #f3f3f3;
+
+select, button{
+  width:100%;
+  padding:12px;
+  border-radius:10px;
+  border:none;
+  font-size:14px;
+  margin-top:10px;
+}
+
+select{
+  background:#eef2ff;
+}
+
+button{
+  background:var(--primary);
+  color:white;
+  cursor:pointer;
+  transition:0.2s;
+}
+
+button:hover{
+  opacity:0.9;
+}
+
+button.danger{
+  background:var(--danger);
+}
+
+#reader{
+  width:100%;
+  border-radius:12px;
+  overflow:hidden;
+}
+
+.result{
+  margin-top:15px;
+  font-size:14px;
+}
+
+.small{
+  font-size:12px;
+  color:#666;
+}
+
+@media (max-width:480px){
+  h1{ font-size:18px; }
 }
 </style>
 </head>
 <body>
 
+<div class="container">
+
+<div class="card">
 <h1>GS1バーコードツール</h1>
 
-<div class="mode">
-現在のモード：
+<label>モード選択</label>
 <select id="modeSelect">
   <option value="save">データ保存モード</option>
   <option value="search">検索モード</option>
 </select>
-</div>
 
-<div id="reader"></div>
+<button id="cameraBtn">カメラ ON</button>
+<div id="reader" style="display:none;"></div>
 
 <div class="result" id="output"></div>
+<div class="small">保存データはブラウザ内に保持されます（localStorage）</div>
+</div>
+
+</div>
 
 <script>
 let db = JSON.parse(localStorage.getItem("gs1db") || "[]");
+let cameraActive = false;
 
-function saveDB() {
+function saveDB(){
   localStorage.setItem("gs1db", JSON.stringify(db));
 }
 
-// GS1解析
-function parseGS1(data) {
-  let gtin = null;
-  let expiry = null;
+function parseGS1(data){
+  let gtin=null;
+  let expiry=null;
 
-  if (data.includes("(01)")) {
-    gtin = data.match(/\(01\)(\d{14})/)?.[1];
-  } else if (data.startsWith("01")) {
-    gtin = data.substring(2, 16);
+  if(data.startsWith("01")){
+    gtin=data.substring(2,16);
   }
+  let expMatch=data.match(/17(\d{6})/);
+  if(expMatch) expiry=expMatch[1];
 
-  if (data.includes("(17)")) {
-    expiry = data.match(/\(17\)(\d{6})/)?.[1];
-  } else {
-    let match = data.match(/17(\d{6})/);
-    if (match) expiry = match[1];
-  }
-
-  return { gtin, expiry };
+  return {gtin, expiry};
 }
 
-function formatExpiry(e) {
-  if (!e) return "";
-  return "20" + e.substring(0,2) + "-" + e.substring(2,4) + "-" + e.substring(4,6);
+function formatExpiry(e){
+  return "20"+e.substring(0,2)+"-"+e.substring(2,4)+"-"+e.substring(4,6);
 }
 
-function handleScan(code) {
-  let mode = document.getElementById("modeSelect").value;
-  let parsed = parseGS1(code);
+function handleScan(code){
+  let mode=document.getElementById("modeSelect").value;
+  let parsed=parseGS1(code);
 
-  let gtin = parsed.gtin;
-  let expiry = parsed.expiry;
+  let gtin=parsed.gtin || prompt("GTIN(14桁)を入力してください");
+  let expiry=parsed.expiry || prompt("使用期限(YYMMDD)を入力してください");
 
-  if (!gtin) {
-    gtin = prompt("GTINが読み取れません。入力してください（14桁）");
-  }
-  if (!expiry) {
-    expiry = prompt("使用期限が読み取れません。入力してください（YYMMDD）");
-  }
-
-  if (!gtin || !expiry) {
-    alert("入力が不完全です。");
+  if(!gtin || !expiry){
+    alert("入力が不完全です");
     return;
   }
 
-  expiry = formatExpiry(expiry);
+  expiry=formatExpiry(expiry);
 
-  if (mode === "save") {
-    db.push({ gtin, expiry });
+  if(mode==="save"){
+    db.push({gtin,expiry});
     saveDB();
-    document.getElementById("output").innerHTML =
-      "保存しました<br>GTIN: " + gtin + "<br>期限: " + expiry;
+    document.getElementById("output").innerHTML=
+      "保存しました<br>GTIN: "+gtin+"<br>期限: "+expiry;
   }
 
-  if (mode === "search") {
-    let matches = db.filter(x => x.gtin === gtin);
-    if (matches.length === 0) {
-      document.getElementById("output").innerHTML = "該当商品なし";
+  if(mode==="search"){
+    let matches=db.filter(x=>x.gtin===gtin);
+
+    if(matches.length===0){
+      document.getElementById("output").innerHTML="該当商品なし";
       return;
     }
 
-    let earliest = matches.reduce((a,b)=> a.expiry < b.expiry ? a : b);
+    let earliest=matches.reduce((a,b)=>a.expiry<b.expiry?a:b);
 
-    document.getElementById("output").innerHTML =
-      "該当件数: " + matches.length + "<br>" +
-      "最短期限: " + earliest.expiry + "<br><br>" +
-      "<button onclick='deleteCurrent(\""+gtin+"\",\""+expiry+"\")'>今読んだ期限データを削除</button>";
+    document.getElementById("output").innerHTML=
+      "該当件数: "+matches.length+"<br>"+
+      "最短期限: "+earliest.expiry+"<br><br>"+
+      "<button class='danger' onclick='deleteCurrent(\""+gtin+"\",\""+expiry+"\")'>"+
+      "今読んだ期限データを削除</button>";
   }
 }
 
-function deleteCurrent(gtin, expiry) {
-  let index = db.findIndex(x => x.gtin===gtin && x.expiry===expiry);
-  if (index >= 0) {
+function deleteCurrent(gtin,expiry){
+  let index=db.findIndex(x=>x.gtin===gtin && x.expiry===expiry);
+  if(index>=0){
     db.splice(index,1);
     saveDB();
     alert("削除しました");
-  } else {
+  }else{
     alert("該当データなし");
   }
 }
 
-Quagga.init({
-  inputStream : {
-    name : "Live",
-    type : "LiveStream",
-    target: document.querySelector('#reader')
-  },
-  decoder : {
-    readers : ["code_128_reader"]
-  }
-}, function(err) {
-    if (err) {
-        console.log(err);
-        return;
+function startCamera(){
+  Quagga.init({
+    inputStream:{
+      type:"LiveStream",
+      target:document.querySelector("#reader"),
+      constraints:{ facingMode:"environment" }
+    },
+    decoder:{
+      readers:["code_128_reader"]
     }
+  },function(err){
+    if(err){ console.log(err); return; }
     Quagga.start();
-});
+  });
 
-Quagga.onDetected(function(data){
-  let code = data.codeResult.code;
-  handleScan(code);
+  Quagga.onDetected(function(data){
+    handleScan(data.codeResult.code);
+  });
+
+  cameraActive=true;
+  document.getElementById("cameraBtn").innerText="カメラ OFF";
+  document.getElementById("reader").style.display="block";
+}
+
+function stopCamera(){
+  Quagga.stop();
+  cameraActive=false;
+  document.getElementById("cameraBtn").innerText="カメラ ON";
+  document.getElementById("reader").style.display="none";
+}
+
+document.getElementById("cameraBtn").addEventListener("click",function(){
+  if(cameraActive){
+    stopCamera();
+  }else{
+    startCamera();
+  }
 });
 </script>
 
