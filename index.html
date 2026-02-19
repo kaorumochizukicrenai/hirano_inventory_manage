@@ -3,221 +3,201 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>医療GS1 撮影解析モード</title>
-
+<title>医療バーコードSPA</title>
 <style>
-body{
-  margin:0;
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto;
-  background:#f4f6f9;
-}
-.container{
-  max-width:600px;
-  margin:auto;
-  padding:16px;
-}
-.card{
-  background:white;
-  padding:16px;
-  border-radius:16px;
-  box-shadow:0 6px 20px rgba(0,0,0,0.08);
-}
-video,canvas{
-  width:100%;
-  border-radius:12px;
-  background:black;
-  margin-top:10px;
-}
-button{
-  width:100%;
-  padding:14px;
-  margin-top:10px;
-  border:none;
-  border-radius:12px;
-  font-size:16px;
-}
-.primary{background:#007aff;color:white;}
-.status{
-  margin-top:10px;
-  font-weight:bold;
-}
-.result{
-  margin-top:10px;
-  word-break:break-all;
-  font-size:14px;
-}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto;background:#f4f6f9;}
+header{background:#007aff;color:white;padding:12px;text-align:center;font-size:18px;}
+.container{padding:16px;}
+button{width:100%;padding:14px;margin:8px 0;border:none;border-radius:12px;font-size:16px;background:#007aff;color:white;}
+.secondary{background:#666;}
+.card{background:white;padding:16px;border-radius:16px;box-shadow:0 6px 20px rgba(0,0,0,0.08);}
+video{width:100%;border-radius:12px;background:black;margin-top:10px;}
+input,textarea{width:100%;padding:10px;margin-top:6px;border-radius:8px;border:1px solid #ccc;}
+.item{border-bottom:1px solid #eee;padding:8px 0;}
+.hidden{display:none;}
 </style>
 </head>
 <body>
 
+<header>医療バーコード管理</header>
 <div class="container">
-<h2>医療GS1 撮影解析モード</h2>
 
-<div class="card">
-
-<button class="primary" onclick="startCamera()">カメラ起動</button>
-<button class="primary" onclick="capturePhoto()">撮影して解析</button>
-
-<video id="video" autoplay playsinline></video>
-<canvas id="canvas" style="display:none;"></canvas>
-
-<div class="status" id="status"></div>
-<div class="result" id="result"></div>
-
-</div>
+<div id="home">
+<button onclick="showPage('view')">データ閲覧</button>
+<button onclick="showPage('save')">バーコード保存</button>
+<button onclick="showPage('search')">バーコード照会</button>
+<button onclick="showPage('api')">API情報</button>
 </div>
 
-<script type="module">
+<div id="view" class="hidden card">
+<h3>保存データ一覧</h3>
+<div id="dataList"></div>
+<button class="secondary" onclick="showPage('home')">戻る</button>
+</div>
 
-import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.4/+esm";
+<div id="save" class="hidden card">
+<h3>バーコード保存</h3>
+<video id="videoSave" autoplay playsinline></video>
+<button onclick="captureAndSend('save')">読み取り</button>
+<div id="saveResult"></div>
+<button class="secondary" onclick="showPage('home')">戻る</button>
+</div>
 
-let video = document.getElementById("video");
-let canvas = document.getElementById("canvas");
-let statusEl = document.getElementById("status");
-let resultEl = document.getElementById("result");
+<div id="search" class="hidden card">
+<h3>バーコード照会</h3>
+<video id="videoSearch" autoplay playsinline></video>
+<button onclick="captureAndSend('search')">読み取り</button>
+<div id="searchResult"></div>
+<button class="secondary" onclick="showPage('home')">戻る</button>
+</div>
 
-let stream = null;
-let reader = new BrowserMultiFormatReader();
+<div id="api" class="hidden card">
+<h3>Gemini API設定</h3>
+<label>APIキー</label>
+<input id="apiKey">
+<label>プロンプト</label>
+<textarea id="prompt" rows="5"></textarea>
+<button onclick="saveAPI()">保存</button>
+<button class="secondary" onclick="showPage('home')">戻る</button>
+</div>
 
-window.startCamera = async function(){
+<canvas id="canvas" class="hidden"></canvas>
 
-  try{
-    stream = await navigator.mediaDevices.getUserMedia({
-      video:{
-        facingMode:{ ideal:"environment" },
-        width:{ ideal:1920 },
-        height:{ ideal:1080 }
-      },
-      audio:false
-    });
+</div>
 
-    video.srcObject = stream;
-    statusEl.innerText = "カメラ起動完了";
-  }
-  catch(e){
-    alert("カメラ起動失敗：" + e);
-  }
-};
+<script>
+let currentStream=null;
+let memoryDB=[];
 
-window.capturePhoto = async function(){
+function showPage(page){
 
-  if(!stream){
-    alert("先にカメラを起動してください");
-    return;
-  }
+document.querySelectorAll(".card,#home").forEach(el=>el.classList.add("hidden"));
+document.getElementById(page).classList.remove("hidden");
 
-  statusEl.innerText = "撮影中...";
+if(page==="save") startCamera("videoSave");
+if(page==="search") startCamera("videoSearch");
+if(page==="home"){ stopCamera(); }
 
-  const context = canvas.getContext("2d");
+if(page==="view"){ renderData(); }
 
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-
-  context.drawImage(video,0,0);
-
-  // 前処理
-  preprocessImage(context, canvas.width, canvas.height);
-
-  statusEl.innerText = "解析中...";
-
-  try{
-
-    // 1回目
-    let result = await reader.decodeFromCanvas(canvas);
-
-    handleResult(result.getText());
-    return;
-
-  }catch{}
-
-  // 回転して再試行
-  try{
-    rotateCanvas(context, canvas);
-    let result = await reader.decodeFromCanvas(canvas);
-    handleResult(result.getText());
-    return;
-  }catch{}
-
-  alert("バーコードを読み取れませんでした");
-  statusEl.innerText = "失敗";
-};
-
-function preprocessImage(ctx,width,height){
-
-  let imageData = ctx.getImageData(0,0,width,height);
-  let data = imageData.data;
-
-  for(let i=0;i<data.length;i+=4){
-
-    let r=data[i];
-    let g=data[i+1];
-    let b=data[i+2];
-
-    // グレースケール
-    let gray=(r+g+b)/3;
-
-    // コントラスト強化
-    gray = gray > 128 ? 255 : 0;
-
-    data[i]=data[i+1]=data[i+2]=gray;
-  }
-
-  ctx.putImageData(imageData,0,0);
 }
 
-function rotateCanvas(ctx,canvas){
-
-  let temp=document.createElement("canvas");
-  temp.width=canvas.height;
-  temp.height=canvas.width;
-
-  let tctx=temp.getContext("2d");
-  tctx.translate(temp.width/2,temp.height/2);
-  tctx.rotate(Math.PI/2);
-  tctx.drawImage(canvas,-canvas.width/2,-canvas.height/2);
-
-  canvas.width=temp.width;
-  canvas.height=temp.height;
-
-  ctx.drawImage(temp,0,0);
+async function startCamera(videoId){
+stopCamera();
+currentStream=await navigator.mediaDevices.getUserMedia({
+video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},
+audio:false
+});
+document.getElementById(videoId).srcObject=currentStream;
 }
 
-function handleResult(text){
-
-  resultEl.innerText = text;
-
-  const parsed = parseGS1(text);
-
-  if(!parsed){
-    alert("医療用GS1ではありません");
-    statusEl.innerText="非対応コード";
-    return;
-  }
-
-  statusEl.innerText="医療GS1検出成功";
-
-  alert("GTIN:"+parsed.gtin+"\n有効期限:"+parsed.expiry);
+function stopCamera(){
+if(currentStream){
+currentStream.getTracks().forEach(t=>t.stop());
+currentStream=null;
+}
 }
 
-function parseGS1(text){
+async function captureAndSend(mode){
 
-  const gtin=text.match(/\(01\)(\d{14})/);
-  const exp=text.match(/\(17\)(\d{6})/);
+let video=document.getElementById(mode==="save"?"videoSave":"videoSearch");
+let canvas=document.getElementById("canvas");
+canvas.width=video.videoWidth;
+canvas.height=video.videoHeight;
+let ctx=canvas.getContext("2d");
+ctx.drawImage(video,0,0);
 
-  if(!gtin||!exp){
-    return null;
-  }
+let base64=canvas.toDataURL("image/jpeg").split(",")[1];
 
-  const year="20"+exp[1].substring(0,2);
-  const month=exp[1].substring(2,4);
-  const day=exp[1].substring(4,6);
+let apiKey=localStorage.getItem("gemini_key");
+let prompt=localStorage.getItem("gemini_prompt");
 
-  return{
-    gtin:gtin[1],
-    expiry:`${year}-${month}-${day}`
-  };
+if(!apiKey||!prompt){alert("API情報未設定");return;}
+
+let res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+contents:[{
+parts:[
+{text:prompt},
+{inline_data:{mime_type:"image/jpeg",data:base64}}
+]
+}]
+})
+});
+
+let json=await res.json();
+
+try{
+let text=json.candidates[0].content.parts[0].text;
+let data=JSON.parse(text);
+handleResult(data,mode);
+}catch(e){
+alert("解析失敗");
 }
 
+}
+
+function handleResult(data,mode){
+
+if(data.type!=="医療"||!data.productType||!data.expiry){
+alert("医療バーコードではありません");
+return;
+}
+
+if(mode==="save"){
+memoryDB.push(data);
+document.getElementById("saveResult").innerText="保存成功："+data.productType+" "+data.expiry;
+}
+
+if(mode==="search"){
+
+let same=memoryDB.filter(d=>d.productType===data.productType);
+if(same.length===0){alert("該当なし");return;}
+
+same.sort((a,b)=>a.expiry.localeCompare(b.expiry));
+let nearest=same[0];
+
+let exactIndex=memoryDB.findIndex(d=>d.productType===data.productType&&d.expiry===data.expiry);
+
+let html="最短期限："+nearest.expiry+"<br>";
+
+if(exactIndex!==-1){
+html+="<button onclick='consume("+exactIndex+")'>今回分を使用済みにする</button>";
+}
+
+document.getElementById("searchResult").innerHTML=html;
+}
+
+}
+
+function consume(index){
+memoryDB.splice(index,1);
+alert("削除しました");
+renderData();
+}
+
+function renderData(){
+let el=document.getElementById("dataList");
+el.innerHTML="";
+memoryDB.forEach((d,i)=>{
+el.innerHTML+=`<div class="item">${d.productType} - ${d.expiry}
+<button onclick="consume(${i})">削除</button></div>`;
+});
+}
+
+function saveAPI(){
+localStorage.setItem("gemini_key",document.getElementById("apiKey").value);
+localStorage.setItem("gemini_prompt",document.getElementById("prompt").value);
+alert("保存しました");
+}
+
+document.getElementById("apiKey").value=localStorage.getItem("gemini_key")||"";
+document.getElementById("prompt").value=localStorage.getItem("gemini_prompt")||"";
+
+showPage("home");
 </script>
+
 </body>
 </html>
