@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GS1 医療用 DataBar対応ツール</title>
+<title>GS1 DataBar 医療用ツール</title>
 
 <script type="module">
-import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.1/+esm";
+import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.4/+esm";
 
 const reader = new BrowserMultiFormatReader();
 let cameraActive = false;
@@ -45,12 +45,12 @@ function handleScan(text){
   const parsed=parseGS1(text);
 
   if(!parsed.gtin || !parsed.expiry){
-    alert("医療用GS1 (01)+(17) を含むDataBarではありません。");
+    alert("医療用GS1 (01)+(17) を含むバーコードではありません。");
     return;
   }
 
   if(!validDateYYMMDD(parsed.expiry)){
-    alert("有効期限フォーマット不正");
+    alert("有効期限フォーマット不正（YYMMDD）");
     return;
   }
 
@@ -90,19 +90,20 @@ window.deleteCurrent=function(gtin,expiry){
   }
 }
 
-window.startCamera=async function(){
+window.startCamera=function(){
   cameraActive=true;
   document.getElementById("cameraBtn").innerText="カメラ OFF";
   document.getElementById("video").style.display="block";
 
-  const devices=await reader.listVideoInputDevices();
-  const deviceId=devices[0].deviceId;
-
-  reader.decodeFromVideoDevice(deviceId,"video",(result,err)=>{
-    if(result){
-      handleScan(result.getText());
+  reader.decodeFromVideoDevice(
+    undefined,
+    "video",
+    (result,err)=>{
+      if(result){
+        handleScan(result.getText());
+      }
     }
-  });
+  );
 }
 
 window.stopCamera=function(){
@@ -126,19 +127,12 @@ body{
   justify-content:center;
   padding:20px;
 }
-.container{
-  width:100%;
-  max-width:520px;
-}
+.container{width:100%;max-width:520px;}
 .card{
   background:#fff;
   padding:20px;
   border-radius:16px;
   box-shadow:0 10px 25px rgba(0,0,0,0.08);
-}
-h1{
-  font-size:20px;
-  margin-bottom:15px;
 }
 select,button{
   width:100%;
@@ -146,25 +140,19 @@ select,button{
   border-radius:10px;
   border:1px solid #ddd;
   margin-top:10px;
-  font-size:14px;
 }
 button{
   background:#2563eb;
   color:#fff;
   border:none;
-  cursor:pointer;
 }
-button:hover{opacity:0.9;}
 button.danger{background:#dc2626;}
 video{
   width:100%;
   margin-top:15px;
   border-radius:12px;
 }
-.result{
-  margin-top:15px;
-  font-size:14px;
-}
+.result{margin-top:15px;}
 </style>
 </head>
 
@@ -172,7 +160,7 @@ video{
 <div class="container">
 <div class="card">
 
-<h1>GS1 DataBar 医療用ツール</h1>
+<h2>GS1 DataBar 医療用ツール</h2>
 
 <select id="modeSelect">
 <option value="save">データ保存モード</option>
@@ -180,10 +168,9 @@ video{
 </select>
 
 <button id="cameraBtn" onclick="toggleCamera()">カメラ ON</button>
-
 <video id="video" style="display:none;"></video>
 
-<div class="result" id="output"></div>
+<div id="output" class="result"></div>
 
 </div>
 </div>
