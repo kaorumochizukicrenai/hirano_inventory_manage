@@ -3,9 +3,119 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GS1 医療用バーコードツール</title>
+<title>GS1 医療用 DataBar対応ツール</title>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<script type="module">
+import { BrowserMultiFormatReader } from "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.1/+esm";
+
+const reader = new BrowserMultiFormatReader();
+let cameraActive = false;
+let db = JSON.parse(localStorage.getItem("gs1db") || "[]");
+
+function saveDB(){
+  localStorage.setItem("gs1db", JSON.stringify(db));
+}
+
+function validDateYYMMDD(v){
+  if(!/^\d{6}$/.test(v)) return false;
+  let y=2000+parseInt(v.slice(0,2));
+  let m=parseInt(v.slice(2,4));
+  let d=parseInt(v.slice(4,6));
+  let date=new Date(y,m-1,d);
+  return date.getFullYear()===y &&
+         date.getMonth()===m-1 &&
+         date.getDate()===d;
+}
+
+function parseGS1(data){
+  let cleaned=data.replace(/\x1D/g,"");
+  let gtinMatch=cleaned.match(/01(\d{14})/);
+  let expMatch=cleaned.match(/17(\d{6})/);
+  return{
+    gtin:gtinMatch?gtinMatch[1]:null,
+    expiry:expMatch?expMatch[1]:null
+  };
+}
+
+function formatExpiry(e){
+  return "20"+e.slice(0,2)+"-"+e.slice(2,4)+"-"+e.slice(4,6);
+}
+
+function handleScan(text){
+  const parsed=parseGS1(text);
+
+  if(!parsed.gtin || !parsed.expiry){
+    alert("医療用GS1 (01)+(17) を含むDataBarではありません。");
+    return;
+  }
+
+  if(!validDateYYMMDD(parsed.expiry)){
+    alert("有効期限フォーマット不正");
+    return;
+  }
+
+  const gtin=parsed.gtin;
+  const expiry=formatExpiry(parsed.expiry);
+  const mode=document.getElementById("modeSelect").value;
+
+  if(mode==="save"){
+    db.push({gtin,expiry});
+    saveDB();
+    output.innerHTML=`保存完了<br>GTIN: ${gtin}<br>期限: ${expiry}`;
+  }
+
+  if(mode==="search"){
+    let matches=db.filter(x=>x.gtin===gtin);
+    if(matches.length===0){
+      output.innerHTML="該当在庫なし";
+      return;
+    }
+    let earliest=matches.reduce((a,b)=>a.expiry<b.expiry?a:b);
+    output.innerHTML=
+      `該当件数: ${matches.length}<br>
+       最短期限: ${earliest.expiry}<br><br>
+       <button class="danger" onclick="deleteCurrent('${gtin}','${expiry}')">
+       今読んだ期限を削除</button>`;
+  }
+}
+
+window.deleteCurrent=function(gtin,expiry){
+  let index=db.findIndex(x=>x.gtin===gtin && x.expiry===expiry);
+  if(index>=0){
+    db.splice(index,1);
+    saveDB();
+    alert("削除しました");
+  }else{
+    alert("該当データなし");
+  }
+}
+
+window.startCamera=async function(){
+  cameraActive=true;
+  document.getElementById("cameraBtn").innerText="カメラ OFF";
+  document.getElementById("video").style.display="block";
+
+  const devices=await reader.listVideoInputDevices();
+  const deviceId=devices[0].deviceId;
+
+  reader.decodeFromVideoDevice(deviceId,"video",(result,err)=>{
+    if(result){
+      handleScan(result.getText());
+    }
+  });
+}
+
+window.stopCamera=function(){
+  reader.reset();
+  cameraActive=false;
+  document.getElementById("cameraBtn").innerText="カメラ ON";
+  document.getElementById("video").style.display="none";
+}
+
+window.toggleCamera=function(){
+  cameraActive?stopCamera():startCamera();
+}
+</script>
 
 <style>
 body{
@@ -30,7 +140,7 @@ h1{
   font-size:20px;
   margin-bottom:15px;
 }
-select,button,input{
+select,button{
   width:100%;
   padding:12px;
   border-radius:10px;
@@ -46,167 +156,36 @@ button{
 }
 button:hover{opacity:0.9;}
 button.danger{background:#dc2626;}
-#reader{
+video{
+  width:100%;
   margin-top:15px;
   border-radius:12px;
-  overflow:hidden;
 }
 .result{
   margin-top:15px;
   font-size:14px;
 }
-.small{
-  font-size:12px;
-  color:#666;
-}
 </style>
 </head>
-<body>
 
+<body>
 <div class="container">
 <div class="card">
 
-<h1>GS1 医療用バーコードツール</h1>
+<h1>GS1 DataBar 医療用ツール</h1>
 
 <select id="modeSelect">
 <option value="save">データ保存モード</option>
 <option value="search">検索モード</option>
 </select>
 
-<button id="cameraBtn">カメラ ON</button>
-<div id="reader" style="display:none;"></div>
+<button id="cameraBtn" onclick="toggleCamera()">カメラ ON</button>
+
+<video id="video" style="display:none;"></video>
 
 <div class="result" id="output"></div>
-<div class="small">医療用GS1 (01)+(17) が含まれない場合は保存不可</div>
 
 </div>
 </div>
-
-<script>
-let db=JSON.parse(localStorage.getItem("gs1db")||"[]");
-let cameraActive=false;
-
-function saveDB(){
-  localStorage.setItem("gs1db",JSON.stringify(db));
-}
-
-function validDateYYMMDD(v){
-  if(!/^\d{6}$/.test(v)) return false;
-  let y=2000+parseInt(v.slice(0,2));
-  let m=parseInt(v.slice(2,4));
-  let d=parseInt(v.slice(4,6));
-  let date=new Date(y,m-1,d);
-  return date.getFullYear()===y &&
-         date.getMonth()===m-1 &&
-         date.getDate()===d;
-}
-
-function parseGS1(data){
-  let cleaned=data.replace(/\x1D/g,""); // FNC1除去
-  let gtinMatch=cleaned.match(/01(\d{14})/);
-  let expMatch=cleaned.match(/17(\d{6})/);
-  return{
-    gtin:gtinMatch?gtinMatch[1]:null,
-    expiry:expMatch?expMatch[1]:null
-  };
-}
-
-function formatExpiry(e){
-  return "20"+e.slice(0,2)+"-"+e.slice(2,4)+"-"+e.slice(4,6);
-}
-
-function handleScan(code){
-  let parsed=parseGS1(code);
-
-  if(!parsed.gtin || !parsed.expiry){
-    alert("医療用GS1 (01)+(17) を含むバーコードではありません。");
-    return;
-  }
-
-  if(!validDateYYMMDD(parsed.expiry)){
-    alert("有効期限フォーマット不正です（YYMMDD）");
-    return;
-  }
-
-  let gtin=parsed.gtin;
-  let expiry=formatExpiry(parsed.expiry);
-  let mode=document.getElementById("modeSelect").value;
-
-  if(mode==="save"){
-    db.push({gtin,expiry});
-    saveDB();
-    document.getElementById("output").innerHTML=
-      "保存完了<br>GTIN: "+gtin+"<br>期限: "+expiry;
-  }
-
-  if(mode==="search"){
-    let matches=db.filter(x=>x.gtin===gtin);
-    if(matches.length===0){
-      document.getElementById("output").innerHTML="該当在庫なし";
-      return;
-    }
-    let earliest=matches.reduce((a,b)=>a.expiry<b.expiry?a:b);
-    document.getElementById("output").innerHTML=
-      "該当件数: "+matches.length+"<br>"+
-      "最短期限: "+earliest.expiry+"<br><br>"+
-      "<button class='danger' onclick='deleteCurrent(\""+gtin+"\",\""+expiry+"\")'>今読んだ期限を削除</button>";
-  }
-}
-
-function deleteCurrent(gtin,expiry){
-  let index=db.findIndex(x=>x.gtin===gtin && x.expiry===expiry);
-  if(index>=0){
-    db.splice(index,1);
-    saveDB();
-    alert("削除しました");
-  }else{
-    alert("該当データなし");
-  }
-}
-
-function startCamera(){
-  Quagga.init({
-    inputStream:{
-      type:"LiveStream",
-      target:document.querySelector("#reader"),
-      constraints:{facingMode:"environment"}
-    },
-    decoder:{
-      readers:[
-        "code_128_reader",
-        "ean_reader",
-        "ean_8_reader",
-        "upc_reader",
-        "upc_e_reader",
-        "itf_reader",
-        "codabar_reader"
-      ]
-    }
-  },function(err){
-    if(err){console.log(err);return;}
-    Quagga.start();
-  });
-
-  Quagga.onDetected(function(data){
-    handleScan(data.codeResult.code);
-  });
-
-  cameraActive=true;
-  document.getElementById("cameraBtn").innerText="カメラ OFF";
-  document.getElementById("reader").style.display="block";
-}
-
-function stopCamera(){
-  Quagga.stop();
-  cameraActive=false;
-  document.getElementById("cameraBtn").innerText="カメラ ON";
-  document.getElementById("reader").style.display="none";
-}
-
-document.getElementById("cameraBtn").addEventListener("click",function(){
-  cameraActive?stopCamera():startCamera();
-});
-</script>
-
 </body>
 </html>
