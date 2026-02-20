@@ -243,7 +243,15 @@ async function captureAndSend(mode){
   if(currentMode==="save") startCamera("video");
   if(currentMode==="lookup") startCamera("video2");
 }
+function saveAPI(){
+  const key = document.getElementById("apiKey").value;
+  const prompt = document.getElementById("prompt").value;
 
+  localStorage.setItem("apiKey", key);
+  localStorage.setItem("prompt", prompt);
+
+  alert("API情報を保存しました");
+}
 </script>
 </body>
 </html>
