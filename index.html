@@ -3,74 +3,124 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Inventory SPA</title>
+<title>在庫管理SPA</title>
 
 <style>
-body {
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  margin: 0;
-  background: #f4f6f9;
+*{
+  box-sizing:border-box;
 }
-header {
-  background: #1f2937;
-  color: white;
-  padding: 15px;
-  text-align: center;
-  font-size: 18px;
+
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+  background:#f3f4f6;
+  overflow-x:hidden;
 }
-.container {
-  padding: 15px;
-  max-width: 900px;
-  margin: auto;
+
+header{
+  background:#1f2937;
+  color:white;
+  padding:15px;
+  text-align:center;
+  font-size:18px;
 }
-button {
-  padding: 12px;
-  margin: 5px 0;
-  width: 100%;
-  border: none;
-  border-radius: 8px;
-  background: #2563eb;
-  color: white;
-  font-size: 16px;
+
+.container{
+  padding:15px;
+  max-width:900px;
+  margin:auto;
 }
-button.secondary {
-  background: #6b7280;
+
+button{
+  width:100%;
+  padding:14px;
+  margin:6px 0;
+  border:none;
+  border-radius:10px;
+  background:#2563eb;
+  color:white;
+  font-size:16px;
 }
-input, textarea, select {
-  width: 100%;
-  padding: 10px;
-  margin: 5px 0 15px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  font-size: 16px;
+
+button.secondary{
+  background:#6b7280;
 }
-video, canvas {
-  width: 100%;
-  border-radius: 8px;
+
+input,textarea{
+  width:100%;
+  padding:12px;
+  margin:6px 0 14px 0;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:16px;
 }
-.card {
-  background: white;
-  padding: 10px;
-  border-radius: 10px;
-  margin-bottom: 10px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+
+video{
+  width:100%;
+  border-radius:10px;
+  margin-bottom:10px;
 }
-.warning {
-  color: red;
-  font-weight: bold;
+
+.card{
+  background:white;
+  padding:12px;
+  border-radius:12px;
+  margin-bottom:10px;
+  box-shadow:0 2px 5px rgba(0,0,0,0.1);
 }
+
+.hidden{ display:none; }
+
+/* 🔥 ローディング */
+#loadingOverlay{
+  position:fixed;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  background:rgba(0,0,0,0.7);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:white;
+  font-size:20px;
+  z-index:9999;
+  display:none;
+}
+
+.spinner{
+  border:6px solid #ccc;
+  border-top:6px solid white;
+  border-radius:50%;
+  width:50px;
+  height:50px;
+  animation:spin 1s linear infinite;
+  margin-bottom:20px;
+}
+
+@keyframes spin{
+  0%{ transform:rotate(0deg); }
+  100%{ transform:rotate(360deg); }
+}
+
 @media(min-width:768px){
-  button { width:auto; min-width:200px; }
+  button{ width:auto; min-width:220px; }
 }
-.hidden { display:none; }
 </style>
 </head>
 <body>
 
 <header>在庫管理SPA</header>
+
+<div id="loadingOverlay">
+  <div>
+    <div class="spinner"></div>
+    解析中...
+  </div>
+</div>
+
 <div class="container">
 
-<!-- HOME -->
 <div id="home">
   <button onclick="showView('viewData')">データ閲覧</button>
   <button onclick="showView('saveBarcode')">バーコード保存</button>
@@ -78,46 +128,37 @@ video, canvas {
   <button onclick="showView('apiInfo')">API情報</button>
 </div>
 
-<!-- API INFO -->
 <div id="apiInfo" class="hidden">
-  <h3>API情報</h3>
+  <h3>API設定</h3>
   <input id="apiKey" placeholder="Gemini API Key">
-  <textarea id="prompt"></textarea>
+  <textarea id="prompt" rows="10"></textarea>
   <button onclick="saveAPI()">保存</button>
   <button class="secondary" onclick="goHome()">戻る</button>
 </div>
 
-<!-- SAVE -->
 <div id="saveBarcode" class="hidden">
   <h3>バーコード保存</h3>
   <video id="video" autoplay playsinline></video>
   <canvas id="canvas" class="hidden"></canvas>
   <button onclick="captureAndSend('save')">撮影して解析</button>
 
-  <h4>手動入力</h4>
-  <input id="manualBarcode" placeholder="バーコード番号を入力">
-
   <input id="category" placeholder="商品種別（必須）">
-  <input id="expiry" type="date" placeholder="期限（必須）">
-  <div id="saveResult"></div>
+  <input id="expiry" type="date">
 
+  <div id="saveResult"></div>
   <button class="secondary" onclick="goHome()">戻る</button>
 </div>
 
-<!-- LOOKUP -->
 <div id="lookupBarcode" class="hidden">
   <h3>バーコード照会</h3>
   <video id="video2" autoplay playsinline></video>
   <canvas id="canvas2" class="hidden"></canvas>
   <button onclick="captureAndSend('lookup')">撮影して解析</button>
 
-  <input id="manualLookup" placeholder="手動入力">
   <div id="lookupResult"></div>
-
   <button class="secondary" onclick="goHome()">戻る</button>
 </div>
 
-<!-- VIEW DATA -->
 <div id="viewData" class="hidden">
   <h3>保存データ</h3>
   <div id="dataList"></div>
@@ -127,49 +168,49 @@ video, canvas {
 </div>
 
 <script>
-let stream = null;
-let currentMode = null;
-let inventory = [];
 
-const defaultPrompt = `
-あなたは医療用バーコード解析AIです。
+let stream=null;
+let inventory=[];
+let currentMode=null;
 
-【最重要】
-・不明確な場合は null を返してください。
-・推測は禁止。
-・数字がぼやけている場合は絶対に補完しない。
-・バーコードが視認できない場合は null。
+const defaultPrompt=`
+あなたはバーコード解析AIです。
 
-画像内から読み取れるバーコード値のみ返してください。
+・不明確なら null
+・推測禁止
+・ぼやけている場合は null
+・確実に読み取れた数字のみ返す
 
-JSON形式:
 {
- "barcode": "数値 or null",
- "confidence": 0.0〜1.0
+ "barcode":"値 or null",
+ "confidence":0-1
 }
 `;
 
-function initAPIFields(){
-  document.getElementById("prompt").value =
-    localStorage.getItem("prompt") || defaultPrompt;
-  document.getElementById("apiKey").value =
-    localStorage.getItem("apiKey") || "";
+if(!localStorage.getItem("prompt")){
+  localStorage.setItem("prompt",defaultPrompt);
 }
-initAPIFields();
 
-function saveAPI(){
-  localStorage.setItem("apiKey", document.getElementById("apiKey").value);
-  localStorage.setItem("prompt", document.getElementById("prompt").value);
-  alert("保存しました");
+function showLoading(show){
+  document.getElementById("loadingOverlay").style.display=
+    show?"flex":"none";
 }
 
 function showView(id){
   stopCamera();
-  document.querySelectorAll(".container > div").forEach(d=>d.classList.add("hidden"));
+  document.querySelectorAll(".container>div")
+    .forEach(d=>d.classList.add("hidden"));
   document.getElementById(id).classList.remove("hidden");
+
   if(id==="saveBarcode") startCamera("video");
   if(id==="lookupBarcode") startCamera("video2");
   if(id==="viewData") renderData();
+  if(id==="apiInfo"){
+    document.getElementById("apiKey").value=
+      localStorage.getItem("apiKey")||"";
+    document.getElementById("prompt").value=
+      localStorage.getItem("prompt");
+  }
 }
 
 function goHome(){
@@ -178,127 +219,140 @@ function goHome(){
 }
 
 async function startCamera(videoId){
-  stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: { ideal: "environment" } }
+  stream=await navigator.mediaDevices.getUserMedia({
+    video:{facingMode:{ideal:"environment"}}
   });
-  document.getElementById(videoId).srcObject = stream;
+  document.getElementById(videoId).srcObject=stream;
 }
 
 function stopCamera(){
   if(stream){
     stream.getTracks().forEach(t=>t.stop());
-    stream = null;
+    stream=null;
   }
 }
 
 async function captureAndSend(mode){
-  currentMode = mode;
-  const key = localStorage.getItem("apiKey");
-  const prompt = localStorage.getItem("prompt");
+  currentMode=mode;
+
+  const key=localStorage.getItem("apiKey");
+  const prompt=localStorage.getItem("prompt");
 
   if(!key){ alert("APIキー未設定"); return; }
 
-  const video = mode==="save" ? video : video2;
-  const canvas = mode==="save" ?
-    document.getElementById("canvas") :
-    document.getElementById("canvas2");
+  const videoEl=mode==="save"
+    ?document.getElementById("video")
+    :document.getElementById("video2");
 
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  canvas.getContext("2d").drawImage(video,0,0);
+  const canvas=mode==="save"
+    ?document.getElementById("canvas")
+    :document.getElementById("canvas2");
 
-  const base64 = canvas.toDataURL("image/jpeg").split(",")[1];
+  canvas.width=videoEl.videoWidth;
+  canvas.height=videoEl.videoHeight;
+  canvas.getContext("2d").drawImage(videoEl,0,0);
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent?key=${key}`,
-  {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({
-      contents:[{
-        parts:[
-          { text: prompt },
-          { inline_data:{ mime_type:"image/jpeg", data: base64 } }
-        ]
-      }]
-    })
-  });
+  stopCamera();
+  showLoading(true);
 
-  const data = await res.json();
+  const base64=canvas.toDataURL("image/jpeg").split(",")[1];
+
   try{
-    const text = data.candidates[0].content.parts[0].text;
-    const json = JSON.parse(text);
+    const res=await fetch(
+    `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash-lite:generateContent?key=${key}`,
+    {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({
+        contents:[{
+          parts:[
+            {text:prompt},
+            {inline_data:{mime_type:"image/jpeg",data:base64}}
+          ]
+        }]
+      })
+    });
+
+    const data=await res.json();
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const json=JSON.parse(text);
     handleResult(json);
+
   }catch(e){
     alert("解析不能");
   }
+
+  showLoading(false);
 }
 
 function handleResult(json){
+
   if(!json.barcode){
-    alert("バーコード解析不能");
+    alert("解析不能");
     return;
   }
 
-  if(json.confidence < 0.8){
-    alert("⚠ confidence低: "+json.confidence);
+  if(json.confidence<0.8){
+    alert("⚠ 信頼度低: "+json.confidence);
   }
 
   if(currentMode==="save"){
-    const category = document.getElementById("category").value;
-    const expiry = document.getElementById("expiry").value;
-    if(!category || !expiry){
+    const category=document.getElementById("category").value;
+    const expiry=document.getElementById("expiry").value;
+
+    if(!category||!expiry){
       alert("種別と期限必須");
       return;
     }
+
     inventory.push({
-      barcode: json.barcode,
+      barcode:json.barcode,
       category,
       expiry
     });
-    document.getElementById("saveResult").innerText =
-      "保存: "+json.barcode;
+
+    document.getElementById("saveResult").innerText=
+      "保存完了: "+json.barcode;
   }
 
   if(currentMode==="lookup"){
-    const found = inventory.filter(i=>i.barcode===json.barcode);
+    const found=inventory.filter(i=>i.barcode===json.barcode);
     if(found.length===0){
-      document.getElementById("lookupResult").innerText =
-        "該当なし";
+      document.getElementById("lookupResult").innerText="該当なし";
       return;
     }
-    const nearest = found.sort((a,b)=>
+
+    const nearest=found.sort((a,b)=>
       new Date(a.expiry)-new Date(b.expiry))[0];
 
-    document.getElementById("lookupResult").innerHTML =
+    document.getElementById("lookupResult").innerHTML=
       `最短期限: ${nearest.expiry}
-      <button onclick="useItem('${nearest.barcode}','${nearest.expiry}')">
-      使用済みにする</button>`;
+       <button onclick="useItem('${nearest.barcode}','${nearest.expiry}')">
+       使用済みにする</button>`;
   }
 }
 
-function useItem(barcode, expiry){
-  inventory = inventory.filter(i=>
-    !(i.barcode===barcode && i.expiry===expiry));
+function useItem(barcode,expiry){
+  inventory=inventory.filter(i=>
+    !(i.barcode===barcode&&i.expiry===expiry));
   alert("削除しました");
 }
 
 function renderData(){
-  const el = document.getElementById("dataList");
+  const el=document.getElementById("dataList");
   el.innerHTML="";
   inventory.forEach((i,idx)=>{
-    el.innerHTML += `
-      <div class="card">
-        ${i.category}<br>
-        ${i.barcode}<br>
-        ${i.expiry}
-        <button onclick="inventory.splice(${idx},1);renderData();">
-        削除</button>
-      </div>
-    `;
+    el.innerHTML+=`
+    <div class="card">
+      ${i.category}<br>
+      ${i.barcode}<br>
+      ${i.expiry}
+      <button onclick="inventory.splice(${idx},1);renderData()">
+      削除</button>
+    </div>`;
   });
 }
-</script>
 
+</script>
 </body>
 </html>
